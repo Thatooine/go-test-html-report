@@ -316,7 +316,7 @@ func main() {
 		templates = append(templates, htmlString)
 	}
 
-	report, err := template.ParseFiles("./report.html")
+	report, err := template.ParseFiles("./report-template.html")
 	if err != nil {
 		log.Fatal("error parsing report html")
 	}
@@ -343,7 +343,7 @@ func main() {
 	}
 
 	// write the whole body at once
-	err = ioutil.WriteFile("reportUpdated.html", processedTemplate.Bytes(), 0644)
+	err = ioutil.WriteFile("report.html", processedTemplate.Bytes(), 0644)
 	if err != nil {
 		panic(err)
 	}
