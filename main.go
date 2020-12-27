@@ -46,7 +46,7 @@ func main() {
 	//
 	// Collect Data
 	//
-	file, err := os.Open("./goTestParser/test.log")
+	file, err := os.Open("./test.log")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -316,7 +316,7 @@ func main() {
 		templates = append(templates, htmlString)
 	}
 
-	report, err := template.ParseFiles("./goTestParser/report.html")
+	report, err := template.ParseFiles("./report.html")
 	if err != nil {
 		log.Fatal("error parsing report html")
 	}
