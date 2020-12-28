@@ -24,6 +24,15 @@ type GoTestJsonRowData struct {
 	Elapsed float64
 }
 
+type ProcessedTestdata struct {
+	TotalTestTime     string
+	TestDate          string
+	FailedTests       int
+	PassedTests       int
+	TestSummary       []TestOverview
+	packageDetailsIdx map[string]PackageDetails
+}
+
 type PackageDetails struct {
 	Name        string
 	ElapsedTime float64
@@ -44,10 +53,12 @@ type TestOverview struct {
 }
 
 func main() {
-	//
-	// Collect Data
-	//
-	file, err := os.Open("./test.log")
+
+}
+
+func ReadLogsFromFile(fileName string) []GoTestJsonRowData {
+
+	file, err := os.Open(fileName)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -74,9 +85,11 @@ func main() {
 			log.Fatal(err)
 		}
 	}
-	//
-	// Organize data
-	//
+
+	return rowData
+}
+
+func ProcessTestData(rowData []GoTestJsonRowData) ProcessedTestdata {
 	packageDetailsIdx := map[string]PackageDetails{}
 	for _, r := range rowData {
 		if r.Test == "" {
@@ -174,7 +187,14 @@ func main() {
 	}
 	testDate := rowData[0].Time.Format(time.RFC850)
 
-	GenerateHTMLReport(totalTestTime, testDate, failedTests, passedTests, testSummary, packageDetailsIdx)
+	return ProcessedTestdata{
+		TotalTestTime:     totalTestTime,
+		TestDate:          testDate,
+		FailedTests:       failedTests,
+		PassedTests:       passedTests,
+		TestSummary:       testSummary,
+		packageDetailsIdx: packageDetailsIdx,
+	}
 }
 
 func GenerateHTMLReport(totalTestTime, testDate string, failedTests, passedTests int, testSummary []TestOverview, packageDetailsIdx map[string]PackageDetails) {
@@ -350,7 +370,7 @@ func GenerateHTMLReport(totalTestTime, testDate string, failedTests, passedTests
 		},
 	)
 	if err != nil {
-		log.Print(err.Error())
+		panic(err)
 	}
 
 	// write the whole body at once
