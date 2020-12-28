@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/Thatooine/go-test-html-report/assets"
 	"html/template"
 	"io/ioutil"
 	"log"
@@ -171,7 +172,12 @@ func main() {
 		seconds := int(math.Trunc((rowData[len(rowData)-1].Time.Sub(rowData[0].Time).Minutes() - float64(min)) * 60))
 		totalTestTime = fmt.Sprintf("%dm:%ds", min, seconds)
 	}
+	testDate := rowData[0].Time.Format(time.RFC850)
 
+	GenerateHTMLReport(totalTestTime, testDate, failedTests, passedTests, testSummary, packageDetailsIdx)
+}
+
+func GenerateHTMLReport(totalTestTime, testDate string, failedTests, passedTests int, testSummary []TestOverview, packageDetailsIdx map[string]PackageDetails) {
 	//
 	// Build html report
 	//
@@ -316,7 +322,12 @@ func main() {
 		templates = append(templates, htmlString)
 	}
 
-	report, err := template.ParseFiles("./report-template.html")
+	reportTemplate := template.New("report-template.html")
+	reportTemplateData, err := assets.Asset("report-template.html")
+	if err != nil {
+		panic(err)
+	}
+	report, err := reportTemplate.Parse(string(reportTemplateData))
 	if err != nil {
 		log.Fatal("error parsing report html")
 	}
@@ -335,7 +346,7 @@ func main() {
 			FailedTests:   failedTests,
 			PassedTests:   passedTests,
 			TotalTestTime: totalTestTime,
-			TestDate:      rowData[0].Time.Format(time.RFC850),
+			TestDate:      testDate,
 		},
 	)
 	if err != nil {
