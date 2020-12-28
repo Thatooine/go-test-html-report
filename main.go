@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/Thatooine/go-test-html-report/assets"
+	"github.com/spf13/cobra"
 	"html/template"
 	"io/ioutil"
 	"log"
@@ -53,7 +54,45 @@ type TestOverview struct {
 }
 
 func main() {
+	rootCmd := initCommand()
+	if err := rootCmd.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
 
+var fileName string
+
+func initCommand() *cobra.Command {
+	var rootCmd = &cobra.Command{
+		Use:   "go-test-html-report",
+		Short: "go-test-html-report generates a html report of go-test logs",
+		Long:  "....",
+		RunE: func(cmd *cobra.Command, args []string) (e error) {
+			fileName, _ := cmd.Flags().GetString("file")
+			testData := ReadLogsFromFile(fileName)
+			processedTestdata := ProcessTestData(testData)
+			GenerateHTMLReport(processedTestdata.TotalTestTime,
+				processedTestdata.TestDate,
+				processedTestdata.FailedTests,
+				processedTestdata.PassedTests,
+				processedTestdata.TestSummary,
+				processedTestdata.packageDetailsIdx,
+			)
+			print("Report Generated")
+			return nil
+		},
+	}
+	rootCmd.PersistentFlags().StringVarP(&fileName,
+		"file",
+		"f",
+		"./test.log",
+		"set the file of the go test json logs")
+	err := rootCmd.MarkPersistentFlagRequired("file")
+	if err != nil {
+		panic(err)
+	}
+
+	return rootCmd
 }
 
 func ReadLogsFromFile(fileName string) []GoTestJsonRowData {
