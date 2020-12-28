@@ -68,8 +68,8 @@ func initCommand() *cobra.Command {
 		Short: "go-test-html-report generates a html report of go-test logs",
 		Long:  "....",
 		RunE: func(cmd *cobra.Command, args []string) (e error) {
-			fileName, _ := cmd.Flags().GetString("file")
-			testData := ReadLogsFromFile(fileName)
+			file, _ := cmd.Flags().GetString("file")
+			testData := ReadLogsFromFile(file)
 			processedTestdata := ProcessTestData(testData)
 			GenerateHTMLReport(processedTestdata.TotalTestTime,
 				processedTestdata.TestDate,
@@ -78,7 +78,7 @@ func initCommand() *cobra.Command {
 				processedTestdata.TestSummary,
 				processedTestdata.packageDetailsIdx,
 			)
-			print("Report Generated")
+			log.Println("Report Generated")
 			return nil
 		},
 	}
@@ -89,7 +89,8 @@ func initCommand() *cobra.Command {
 		"set the file of the go test json logs")
 	err := rootCmd.MarkPersistentFlagRequired("file")
 	if err != nil {
-		panic(err)
+		log.Println(err)
+		os.Exit(1)
 	}
 
 	return rootCmd
@@ -99,12 +100,14 @@ func ReadLogsFromFile(fileName string) []GoTestJsonRowData {
 
 	file, err := os.Open(fileName)
 	if err != nil {
-		log.Fatal(err)
+		log.Println("error opening file: ", err)
+		os.Exit(1)
 	}
 	defer func() {
 		err := file.Close()
 		if err != nil {
-			log.Fatal("error closing file ")
+			log.Println("error closing file: ", err)
+			os.Exit(1)
 		}
 	}()
 
@@ -114,14 +117,16 @@ func ReadLogsFromFile(fileName string) []GoTestJsonRowData {
 	// iterate through each line of the file
 	for scanner.Scan() {
 		row := GoTestJsonRowData{}
-		// unmarshall each line to
+		// unmarshall each line to GoTestJsonRowData
 		err := json.Unmarshal([]byte(scanner.Text()), &row)
 		if err != nil {
-			log.Fatal("unable to unmarshall test log")
+			log.Println("error to unmarshall test logs: ", err)
+			os.Exit(1)
 		}
 		rowData = append(rowData, row)
 		if err := scanner.Err(); err != nil {
-			log.Fatal(err)
+			log.Println("error with file scanner: ", err)
+			os.Exit(1)
 		}
 	}
 
@@ -237,18 +242,16 @@ func ProcessTestData(rowData []GoTestJsonRowData) ProcessedTestdata {
 }
 
 func GenerateHTMLReport(totalTestTime, testDate string, failedTests, passedTests int, testSummary []TestOverview, packageDetailsIdx map[string]PackageDetails) {
-	//
-	// Build html report
-	//
 	templates := make([]template.HTML, 0)
 	for _, v := range packageDetailsIdx {
 		htmlString := template.HTML("<div type=\"button\" class=\"collapsible\">\n")
 		packageInfoTemplateString := template.HTML("")
 		packageInfoTemplateString = "<div>{{.packageName}}</div>" + "\n" + "<div>{{.coverage}}</div>" + "\n" + "<div>{{.elapsedTime}}s</div>"
 
-		packageInfoTemplate, err := template.New("package").Parse(string(packageInfoTemplateString))
+		packageInfoTemplate, err := template.New("packageInfoTemplate").Parse(string(packageInfoTemplateString))
 		if err != nil {
-			panic(err)
+			log.Println("error parsing package info template", err)
+			os.Exit(1)
 		}
 		var processedPackageTemplate bytes.Buffer
 		err = packageInfoTemplate.Execute(&processedPackageTemplate, map[string]string{
@@ -257,7 +260,8 @@ func GenerateHTMLReport(totalTestTime, testDate string, failedTests, passedTests
 			"coverage":    v.Coverage,
 		})
 		if err != nil {
-			panic(err)
+			log.Println("error applying package info template: ", err)
+			os.Exit(1)
 		}
 		if v.Status == "pass" {
 			packageInfoTemplateString = "<div class=\"collapsibleHeading packageCardLayout successBackgroundColor \">" +
@@ -279,29 +283,31 @@ func GenerateHTMLReport(totalTestTime, testDate string, failedTests, passedTests
 			}
 		}
 		testInfoTemplateString := template.HTML("")
-		for _, t1 := range packageTests {
+		for _, pt := range packageTests {
 			testHTMLTemplateString := template.HTML("")
 			// check if test contains test cases
-			if len(t1.TestCases) == 0 {
+			if len(pt.TestCases) == 0 {
 				// test does not contain test cases
 				testHTMLTemplateString = "<div>{{.testName}}</div>" + "\n" + "<div>{{.elapsedTime}}s</div>"
-				testTemplate, err := template.New("test").Parse(string(testHTMLTemplateString))
+				testTemplate, err := template.New("standaloneTests").Parse(string(testHTMLTemplateString))
 				if err != nil {
-					panic(err)
+					log.Println("error parsing standalone tests template: ", err)
+					os.Exit(1)
 				}
 
 				var processedTestTemplate bytes.Buffer
 				err = testTemplate.Execute(&processedTestTemplate, map[string]string{
-					"testName":    t1.Test.Name,
-					"elapsedTime": fmt.Sprintf("%f", t1.Test.ElapsedTime),
+					"testName":    pt.Test.Name,
+					"elapsedTime": fmt.Sprintf("%f", pt.Test.ElapsedTime),
 				})
 				if err != nil {
-					panic(err)
+					log.Println("error applying standalone tests template: ", err)
+					os.Exit(1)
 				}
 
-				if t1.Test.Status == "pass" {
+				if pt.Test.Status == "pass" {
 					testHTMLTemplateString = "<div class=\"testCardLayout successBackgroundColor \">" + template.HTML(processedTestTemplate.Bytes()) + "</div>"
-				} else if t1.Test.Status == "fail" {
+				} else if pt.Test.Status == "fail" {
 					testHTMLTemplateString = "<div class=\"testCardLayout failBackgroundColor \">" + template.HTML(processedTestTemplate.Bytes()) + "</div>"
 				} else {
 					testHTMLTemplateString = "<div class=\"testCardLayout skipBackgroundColor \">" + template.HTML(processedTestTemplate.Bytes()) + "</div>"
@@ -310,13 +316,13 @@ func GenerateHTMLReport(totalTestTime, testDate string, failedTests, passedTests
 				continue
 			}
 
-			if t1.Test.Status == "pass" {
+			if pt.Test.Status == "pass" {
 				testHTMLTemplateString = "<div type=\"button\" class=\"collapsible \">" +
 					"\n" + "<div class=\"collapsibleHeading testCardLayout successBackgroundColor \">" +
 					"<div>+ {{.testName}}</div>" + "\n" + "<div>{{.elapsedTime}}s</div>" + "\n" +
 					"</div>" + "\n" +
 					"<div class=\"collapsibleHeadingContent\">"
-			} else if t1.Test.Status == "fail" {
+			} else if pt.Test.Status == "fail" {
 				testHTMLTemplateString = "<div type=\"button\" class=\"collapsible \">" +
 					"\n" + "<div class=\"collapsibleHeading testCardLayout failBackgroundColor \">" +
 					"<div>+ {{.testName}}</div>" + "\n" + "<div>{{.elapsedTime}}s</div>" + "\n" +
@@ -330,26 +336,29 @@ func GenerateHTMLReport(totalTestTime, testDate string, failedTests, passedTests
 					"<div class=\"collapsibleHeadingContent\">"
 			}
 
-			testTemplate, err := template.New("test").Parse(string(testHTMLTemplateString))
+			testTemplate, err := template.New("nonStandaloneTest").Parse(string(testHTMLTemplateString))
 			if err != nil {
-				panic(err)
+				log.Println("error parsing non standalone tests template: ", err)
+				os.Exit(1)
 			}
 
 			var processedTestTemplate bytes.Buffer
 			err = testTemplate.Execute(&processedTestTemplate, map[string]string{
-				"testName":    t1.Test.Name,
-				"elapsedTime": fmt.Sprintf("%f", t1.Test.ElapsedTime),
+				"testName":    pt.Test.Name,
+				"elapsedTime": fmt.Sprintf("%f", pt.Test.ElapsedTime),
 			})
 			if err != nil {
-				panic(err)
+				log.Println("error applying non standalone tests template: ", err)
+				os.Exit(1)
 			}
 			testHTMLTemplateString = template.HTML(processedTestTemplate.Bytes())
 			testCaseHTMlTemplateString := template.HTML("")
-			for _, tC := range t1.TestCases {
+			for _, tC := range pt.TestCases {
 				testCaseHTMlTemplateString = "<div>{{.testName}}</div>" + "\n" + "<div>{{.elapsedTime}}s</div>"
 				testCaseTemplate, err := template.New("testCase").Parse(string(testCaseHTMlTemplateString))
 				if err != nil {
-					panic(err)
+					log.Println("error parsing test case template: ", err)
+					os.Exit(1)
 				}
 
 				var processedTestCaseTemplate bytes.Buffer
@@ -358,7 +367,8 @@ func GenerateHTMLReport(totalTestTime, testDate string, failedTests, passedTests
 					"elapsedTime": fmt.Sprintf("%f", tC.ElapsedTime),
 				})
 				if err != nil {
-					panic(err)
+					log.Println("error applying test case template: ", err)
+					os.Exit(1)
 				}
 				if tC.Status == "pass" {
 					testCaseHTMlTemplateString = "<div class=\"testCardLayout successBackgroundColor \">" + template.HTML(processedTestCaseTemplate.Bytes()) + "</div>"
@@ -368,7 +378,6 @@ func GenerateHTMLReport(totalTestTime, testDate string, failedTests, passedTests
 
 				} else {
 					testCaseHTMlTemplateString = "<div  class=\"testCardLayout skipBackgroundColor \">" + template.HTML(processedTestCaseTemplate.Bytes()) + "</div>"
-
 				}
 				testHTMLTemplateString = testHTMLTemplateString + "\n" + testCaseHTMlTemplateString
 			}
@@ -384,11 +393,14 @@ func GenerateHTMLReport(totalTestTime, testDate string, failedTests, passedTests
 	reportTemplate := template.New("report-template.html")
 	reportTemplateData, err := assets.Asset("report-template.html")
 	if err != nil {
-		panic(err)
+		log.Println("error retrieving report-template.html: ", err)
+		os.Exit(1)
 	}
+
 	report, err := reportTemplate.Parse(string(reportTemplateData))
 	if err != nil {
-		log.Fatal("error parsing report html")
+		log.Println("error parsing report-template.html: ", err)
+		os.Exit(1)
 	}
 	var processedTemplate bytes.Buffer
 	type templateData struct {
@@ -409,12 +421,14 @@ func GenerateHTMLReport(totalTestTime, testDate string, failedTests, passedTests
 		},
 	)
 	if err != nil {
-		panic(err)
+		log.Println("error applying report-template.html: ", err)
+		os.Exit(1)
 	}
 
 	// write the whole body at once
 	err = ioutil.WriteFile("report.html", processedTemplate.Bytes(), 0644)
 	if err != nil {
-		panic(err)
+		log.Println("error writing report.html file: ", err)
+		os.Exit(1)
 	}
 }
