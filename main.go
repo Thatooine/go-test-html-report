@@ -180,9 +180,6 @@ func ProcessTestData(rowData []GoTestJsonRowData) ProcessedTestdata {
 		}
 	}
 
-	//
-	// collect gotest test details
-	//
 	testDetailsIdx := map[string]TestDetails{}
 	testCasesIdx := map[string]TestDetails{}
 	passedTests := 0
