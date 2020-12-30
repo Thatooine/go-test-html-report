@@ -20,7 +20,7 @@ Another way to use `go-test-html-report` is by reading the logs from stdout. Use
 
 ## Interpreting html report
 <p align="center">
-  <img src="./report.png" width="900" height="900" title="hover text" alt="">
+  <img src="./report.png" width="3446" height="990" title="hover text" alt="">
 </p>
 
 The html report groups tests by packages and the test cases by tests. Cards are collapsible if a package contains tests, or a test contains test cases. If the cover
