@@ -68,7 +68,12 @@ func initCommand() *cobra.Command {
 		Short: "go-test-html-report generates a html report of go-test logs",
 		RunE: func(cmd *cobra.Command, args []string) (e error) {
 			file, _ := cmd.Flags().GetString("file")
-			testData := ReadLogsFromFile(file)
+			testData := make([]GoTestJsonRowData, 0)
+			if file != "" {
+				testData = ReadLogsFromFile(file)
+			} else {
+				testData = ReadLogsFromStdIn()
+			}
 			processedTestdata := ProcessTestData(testData)
 			GenerateHTMLReport(processedTestdata.TotalTestTime,
 				processedTestdata.TestDate,
@@ -84,19 +89,12 @@ func initCommand() *cobra.Command {
 	rootCmd.PersistentFlags().StringVarP(&fileName,
 		"file",
 		"f",
-		"./test.log",
+		"",
 		"set the file of the go test json logs")
-	err := rootCmd.MarkPersistentFlagRequired("file")
-	if err != nil {
-		log.Println(err)
-		os.Exit(1)
-	}
-
 	return rootCmd
 }
 
 func ReadLogsFromFile(fileName string) []GoTestJsonRowData {
-
 	file, err := os.Open(fileName)
 	if err != nil {
 		log.Println("error opening file: ", err)
