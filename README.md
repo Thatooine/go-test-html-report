@@ -23,8 +23,7 @@ Another way to use `go-test-html-report` is by reading the logs from stdout. Use
   <img src="./report.png" width="626" height="488" title="hover text" alt="">
 </p>
 
-The html report groups tests by packages and the test cases by tests. Cards are collapsible if a package contains tests, or a test contains test cases. If the cover
-flag has was passed to the go test command then code coverage details will be displayed on the first level cards.
+The html report groups tests by packages and the test cases by tests. Cards are collapsible if a package contains tests, or a test contains test cases. To view code coverage details on the cards pass the coverage flag in the go test command.
 ## Contribute & Support
 
 - Add a GitHub Star
