@@ -66,7 +66,6 @@ func initCommand() *cobra.Command {
 	var rootCmd = &cobra.Command{
 		Use:   "go-test-html-report",
 		Short: "go-test-html-report generates a html report of go-test logs",
-		Long:  "....",
 		RunE: func(cmd *cobra.Command, args []string) (e error) {
 			file, _ := cmd.Flags().GetString("file")
 			testData := ReadLogsFromFile(file)
@@ -114,7 +113,6 @@ func ReadLogsFromFile(fileName string) []GoTestJsonRowData {
 	// file scanner
 	scanner := bufio.NewScanner(file)
 	rowData := make([]GoTestJsonRowData, 0)
-	// iterate through each line of the file
 	for scanner.Scan() {
 		row := GoTestJsonRowData{}
 		// unmarshall each line to GoTestJsonRowData
@@ -124,15 +122,37 @@ func ReadLogsFromFile(fileName string) []GoTestJsonRowData {
 			os.Exit(1)
 		}
 		rowData = append(rowData, row)
-		if err := scanner.Err(); err != nil {
-			log.Println("error with file scanner: ", err)
-			os.Exit(1)
-		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Println("error with file scanner: ", err)
+		os.Exit(1)
 	}
 
 	return rowData
 }
 
+func ReadLogsFromStdIn() []GoTestJsonRowData {
+	// stdin scanner
+	scanner := bufio.NewScanner(os.Stdin)
+	rowData := make([]GoTestJsonRowData, 0)
+	for scanner.Scan() {
+		row := GoTestJsonRowData{}
+		// unmarshall each line to GoTestJsonRowData
+		err := json.Unmarshal([]byte(scanner.Text()), &row)
+		if err != nil {
+			log.Println("error to unmarshall test logs: ", err)
+			os.Exit(1)
+		}
+		rowData = append(rowData, row)
+	}
+	if err := scanner.Err(); err != nil {
+		log.Println("error with stdin scanner: ", err)
+		os.Exit(1)
+	}
+
+	return rowData
+}
 func ProcessTestData(rowData []GoTestJsonRowData) ProcessedTestdata {
 	packageDetailsIdx := map[string]PackageDetails{}
 	for _, r := range rowData {
