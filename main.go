@@ -291,7 +291,7 @@ func GenerateHTMLReport(totalTestTime, testDate string, failedTests, passedTests
 											<div>{{.packageName}}</div>
 											<div>{{.coverage}}</div>
 											<div>{{.elapsedTime}}s</div>
-									`)
+											`)
 
 		packageInfoTemplate, err := template.New("packageInfoTemplate").Parse(string(packageInfoHTMLTemplateString))
 		if err != nil {
@@ -384,7 +384,7 @@ func GenerateHTMLReport(totalTestTime, testDate string, failedTests, passedTests
 					testHTMLTemplate = template.HTML(
 						fmt.Sprintf(
 							`
-										<div class=\"testCardLayout successBackgroundColor \">
+										<div class="testCardLayout successBackgroundColor">
 											%s 
 										</div>
 									`,
@@ -395,7 +395,7 @@ func GenerateHTMLReport(totalTestTime, testDate string, failedTests, passedTests
 					testHTMLTemplate = template.HTML(
 						fmt.Sprintf(
 							`
-										<div class=\"testCardLayout failBackgroundColor \">
+										<div class="testCardLayout failBackgroundColor">
 											%s 
 										</div>
 													`,
@@ -406,7 +406,7 @@ func GenerateHTMLReport(totalTestTime, testDate string, failedTests, passedTests
 					testHTMLTemplate = template.HTML(
 						fmt.Sprintf(
 							`
-									<div class=\"testCardLayout skipBackgroundColor \">
+									<div class="testCardLayout skipBackgroundColor">
 										%s 
 									</div>
 												`,
@@ -420,16 +420,16 @@ func GenerateHTMLReport(totalTestTime, testDate string, failedTests, passedTests
 
 			if pt.TestSuite.Status == "pass" {
 				testHTMLTemplate = `
-											<div type=\"button\" class=\"collapsible\">
-												<div class=\"collapsibleHeading testCardLayout successBackgroundColor \">
+											<div type="button" class="collapsible">
+												<div class="collapsibleHeading testCardLayout successBackgroundColor">
  												<div>{{.testName}}</div>
 												<div>{{.elapsedTime}}s</div>
 											</div>
 											`
 			} else if pt.TestSuite.Status == "fail" {
 				testHTMLTemplate = `
-											<div type=\"button\" class=\"collapsible \">
-												<div class=\"collapsibleHeading testCardLayout failBackgroundColor \">
+											<div type="button" class="collapsible">
+												<div class="collapsibleHeading testCardLayout failBackgroundColor ">
 												<div>{{.testName}}</div>
 												<div>{{.elapsedTime}}s</div>
 											</div>
@@ -477,7 +477,7 @@ func GenerateHTMLReport(totalTestTime, testDate string, failedTests, passedTests
 				if tC.Status == "pass" {
 					testCaseHTMlTemplateString = template.HTML(
 						fmt.Sprintf(`
-												<div class=\"testCardLayout successBackgroundColor \">" 
+												<div class="testCardLayout successBackgroundColor">
 												%s
 												</div>
 											`,
@@ -488,7 +488,7 @@ func GenerateHTMLReport(totalTestTime, testDate string, failedTests, passedTests
 				} else if tC.Status == "fail" {
 					testCaseHTMlTemplateString = template.HTML(
 						fmt.Sprintf(`
-												<div class=\"testCardLayout failBackgroundColor \">" 
+												<div class="testCardLayout failBackgroundColor ">
 												%s
 												</div>
 												`,
