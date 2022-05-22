@@ -284,198 +284,36 @@ func ProcessTestData(rowData []GoTestJsonRowData) (*ProcessedTestdata, error) {
 }
 
 func GenerateHTMLReport(totalTestTime, testDate string, failedTests, passedTests int, testSummary []TestOverview, packageDetailsIdx map[string]PackageDetails) error {
-	templates := make([]template.HTML, 0)
-	for _, v := range packageDetailsIdx {
-		htmlString := template.HTML("<div type=\"button\" class=\"collapsible\">\n")
-		packageInfoHTMLTemplateString := template.HTML(`
-											<div>{{.packageName}}</div>
-											<div>{{.coverage}}</div>
-											<div>{{.elapsedTime}}s</div>
-											`)
 
-		packageInfoTemplate, err := template.New("packageInfoTemplate").Parse(string(packageInfoHTMLTemplateString))
-		if err != nil {
-			log.Error().Err(err).Msg("error parsing package info template")
-			os.Exit(1)
-		}
-		var processedPackageTemplate bytes.Buffer
-		err = packageInfoTemplate.Execute(&processedPackageTemplate, map[string]string{
-			"packageName": v.Name,
-			"elapsedTime": fmt.Sprintf("%f", v.ElapsedTime),
-			"coverage":    v.Coverage,
-		})
-		if err != nil {
-			log.Error().Err(err).Msg("error applying package info template")
-			os.Exit(1)
-		}
+	// generate test cases cards
+	generateTestCaseHTMLElements := func(testsLogOverview []TestOverview) (*map[string][]string, error) {
+		testCasesCardsMap := make(map[string][]string)
+		testCaseHTMLCard := template.HTML("")
 
-		if v.Status == "pass" {
-			packageInfoHTMLTemplateString = template.HTML(
-				fmt.Sprintf(
-					`
-						<div class="collapsibleHeading packageCardLayout successBackgroundColor ">
-							%s
-						</div>
-					`,
-					template.HTML(processedPackageTemplate.Bytes()),
-				),
-			)
-
-		} else if v.Status == "fail" {
-			packageInfoHTMLTemplateString = template.HTML(
-				fmt.Sprintf(
-					`
-						<div class="collapsibleHeading packageCardLayout failBackgroundColor ">
-							%s
-						</div>
-					`,
-					template.HTML(processedPackageTemplate.Bytes()),
-				),
-			)
-
-		} else {
-			packageInfoHTMLTemplateString = template.HTML(
-				fmt.Sprintf(
-					`
-						<div class="collapsibleHeading packageCardLayout skipBackgroundColor ">
-							%s
-						</div>
-					`,
-					template.HTML(processedPackageTemplate.Bytes()),
-				),
-			)
-		}
-
-		htmlString = htmlString + "\n" + packageInfoHTMLTemplateString
-
-		packageTests := make([]TestOverview, 0)
-		for _, t := range testSummary {
-			if t.TestSuite.PackageName == v.Name {
-				packageTests = append(packageTests, t)
-			}
-		}
-		testInfoTemplateString := template.HTML("")
-		for _, pt := range packageTests {
-			testHTMLTemplate := template.HTML("")
-			// check if test suite contains test cases
-			if len(pt.TestCases) == 0 {
-				// test suite does not contain test cases
-				testHTMLTemplate = `<div>{{.testName}}</div>
-									<div>{{.elapsedTime}}s</div>
+		for _, testSuite := range testsLogOverview {
+			for _, testCaseDetails := range testSuite.TestCases {
+				testCaseHTMLCard = `
+										<div>{{.testName}}</div>
+										<div>{{.elapsedTime}}s</div>
 									`
-
-				testTemplate, err := template.New("standaloneTests").Parse(string(testHTMLTemplate))
-				if err != nil {
-					log.Error().Err(err).Msg("error parsing standalone tests template")
-					os.Exit(1)
-				}
-
-				var processedTestTemplate bytes.Buffer
-				err = testTemplate.Execute(&processedTestTemplate, map[string]string{
-					"testName":    pt.TestSuite.Name,
-					"elapsedTime": fmt.Sprintf("%f", pt.TestSuite.ElapsedTime),
-				})
-				if err != nil {
-					log.Error().Err(err).Msg("error applying standalone tests template")
-					os.Exit(1)
-				}
-
-				if pt.TestSuite.Status == "pass" {
-					testHTMLTemplate = template.HTML(
-						fmt.Sprintf(
-							`
-										<div class="testCardLayout successBackgroundColor">
-											%s 
-										</div>
-									`,
-							template.HTML(processedTestTemplate.Bytes()),
-						),
-					)
-				} else if pt.TestSuite.Status == "fail" {
-					testHTMLTemplate = template.HTML(
-						fmt.Sprintf(
-							`
-										<div class="testCardLayout failBackgroundColor">
-											%s 
-										</div>
-													`,
-							template.HTML(processedTestTemplate.Bytes()),
-						),
-					)
-				} else {
-					testHTMLTemplate = template.HTML(
-						fmt.Sprintf(
-							`
-									<div class="testCardLayout skipBackgroundColor">
-										%s 
-									</div>
-												`,
-							template.HTML(processedTestTemplate.Bytes()),
-						),
-					)
-				}
-				testInfoTemplateString = testInfoTemplateString + testHTMLTemplate
-				continue
-			}
-
-			if pt.TestSuite.Status == "pass" {
-				testHTMLTemplate = `
-											<div type="button" class="collapsible">
-												<div class="collapsibleHeading testCardLayout successBackgroundColor">
- 												<div>{{.testName}}</div>
-												<div>{{.elapsedTime}}s</div>
-											</div>
-											`
-			} else if pt.TestSuite.Status == "fail" {
-				testHTMLTemplate = `
-											<div type="button" class="collapsible">
-												<div class="collapsibleHeading testCardLayout failBackgroundColor ">
-												<div>{{.testName}}</div>
-												<div>{{.elapsedTime}}s</div>
-											</div>
-											`
-			}
-
-			testTemplate, err := template.New("nonStandaloneTest").Parse(string(testHTMLTemplate))
-			if err != nil {
-				log.Error().Err(err).Msg("error parsing non standalone tests template")
-				return err
-			}
-
-			var processedTestTemplate bytes.Buffer
-			err = testTemplate.Execute(&processedTestTemplate, map[string]string{
-				"testName":    pt.TestSuite.Name,
-				"elapsedTime": fmt.Sprintf("%f", pt.TestSuite.ElapsedTime),
-			})
-			if err != nil {
-				log.Error().Err(err).Msg("error applying non standalone tests template")
-				return err
-			}
-
-			testHTMLTemplate = template.HTML(processedTestTemplate.Bytes())
-			testCaseHTMlTemplateString := template.HTML("")
-			for _, tC := range pt.TestCases {
-				testCaseHTMlTemplateString = `
-												<div>{{.testName}}</div>
-												<div>{{.elapsedTime}}s</div>
-											 `
-				testCaseTemplate, err := template.New("testCase").Parse(string(testCaseHTMlTemplateString))
+				testCaseTemplate, err := template.New("testCase").Parse(string(testCaseHTMLCard))
 				if err != nil {
 					log.Error().Err(err).Msg("error parsing test case template")
-					return err
+					return nil, err
 				}
 
 				var processedTestCaseTemplate bytes.Buffer
 				err = testCaseTemplate.Execute(&processedTestCaseTemplate, map[string]string{
-					"testName":    tC.Name,
-					"elapsedTime": fmt.Sprintf("%f", tC.ElapsedTime),
+					"testName":    testCaseDetails.Name,
+					"elapsedTime": fmt.Sprintf("%f", testCaseDetails.ElapsedTime),
 				})
+
 				if err != nil {
 					log.Error().Err(err).Msg("error applying test case template")
-					return err
+					return nil, err
 				}
-				if tC.Status == "pass" {
-					testCaseHTMlTemplateString = template.HTML(
+				if testCaseDetails.Status == "pass" {
+					testCaseHTMLCard = template.HTML(
 						fmt.Sprintf(`
 												<div class="testCardLayout successBackgroundColor">
 												%s
@@ -485,8 +323,8 @@ func GenerateHTMLReport(totalTestTime, testDate string, failedTests, passedTests
 						),
 					)
 
-				} else if tC.Status == "fail" {
-					testCaseHTMlTemplateString = template.HTML(
+				} else if testCaseDetails.Status == "fail" {
+					testCaseHTMLCard = template.HTML(
 						fmt.Sprintf(`
 												<div class="testCardLayout failBackgroundColor ">
 												%s
@@ -497,16 +335,192 @@ func GenerateHTMLReport(totalTestTime, testDate string, failedTests, passedTests
 					)
 
 				}
-				testHTMLTemplate = testHTMLTemplate + "\n" + testCaseHTMlTemplateString
+				testCasesCardsMap[testSuite.TestSuite.Name] = append(testCasesCardsMap[testSuite.TestSuite.Name], string(testCaseHTMLCard))
 			}
-			testHTMLTemplate = testHTMLTemplate + "\n" + "</div>" + "\n" + "</div>"
-			testInfoTemplateString = testInfoTemplateString + "\n" + testHTMLTemplate
 		}
 
-		htmlString = htmlString + "\n" + "<div class=\"collapsibleHeadingContent\">\n" + testInfoTemplateString + "\n" + "</div>"
-		htmlString = htmlString + "\n" + "</div>"
-		templates = append(templates, htmlString)
+		return &testCasesCardsMap, nil
 	}
+
+	// generate test suites cards
+	generateTestSuiteHTMLElements := func(testLogOverview []TestOverview, testCaseHTMLCards map[string][]string) (*map[string][]string, error) {
+		testSuiteCardsMap := make(map[string][]string)
+		collapsibleHeading := template.HTML("")
+
+		for _, testSuite := range testLogOverview {
+			collapsibleHeading = `
+									<div>{{.testName}}</div>
+									<div>{{.elapsedTime}}s</div>
+								`
+			testCaseTemplate, err := template.New("testCase").Parse(string(collapsibleHeading))
+			if err != nil {
+				log.Error().Err(err).Msg("error parsing test case template")
+				return nil, err
+			}
+
+			var processedTestCaseTemplate bytes.Buffer
+			err = testCaseTemplate.Execute(&processedTestCaseTemplate, map[string]string{
+				"testName":    testSuite.TestSuite.Name,
+				"elapsedTime": fmt.Sprintf("%f", testSuite.TestSuite.ElapsedTime),
+			})
+			if err != nil {
+				log.Error().Err(err).Msg("error applying test case template")
+				return nil, err
+			}
+
+			if testSuite.TestSuite.Status == "pass" {
+				collapsibleHeading = template.HTML(
+					fmt.Sprintf(`
+											<div class="testCardLayout successBackgroundColor collapsibleHeading">
+											%s
+											</div>
+										`,
+						template.HTML(processedTestCaseTemplate.Bytes()),
+					),
+				)
+
+			} else if testSuite.TestSuite.Status == "fail" {
+				collapsibleHeading = template.HTML(
+					fmt.Sprintf(`
+											<div class="testCardLayout failBackgroundColor collapsibleHeading">
+											%s
+											</div>
+										`,
+						template.HTML(processedTestCaseTemplate.Bytes()),
+					),
+				)
+			}
+
+			// construct a collapsible content
+			collapsibleContent := template.HTML(
+				fmt.Sprintf(`
+									<div class="collapsibleHeadingContent">
+										%s
+									</div>
+							`,
+					strings.Join(testCaseHTMLCards[testSuite.TestSuite.Name], "\n"),
+				),
+			)
+
+			// wrap in a collapsible
+			collapsible := template.HTML(
+				fmt.Sprintf(`
+						<div type="button" class="collapsible">
+							%s
+							%s
+						</div>
+							`,
+					string(collapsibleHeading),
+					string(collapsibleContent),
+				),
+			)
+
+			testSuiteCardsMap[testSuite.TestSuite.PackageName] = append(testSuiteCardsMap[testSuite.TestSuite.PackageName], string(collapsible))
+		}
+
+		return &testSuiteCardsMap, nil
+	}
+
+	// generate package cards
+	generatePackageDetailsHTMLElements := func(testSuiteOverview map[string][]string) (string, error) {
+		collapsibleHeading := template.HTML("")
+		elem := make([]string, 0)
+
+		for _, v := range packageDetailsIdx {
+			collapsibleHeading = `
+											<div>{{.packageName}}</div>
+											<div>{{.coverage}}</div>
+											<div>{{.elapsedTime}}s</div>
+											`
+
+			packageInfoTemplate, err := template.New("packageInfoTemplate").Parse(string(collapsibleHeading))
+			if err != nil {
+				log.Error().Err(err).Msg("error parsing package info template")
+				os.Exit(1)
+			}
+			var processedPackageTemplate bytes.Buffer
+			err = packageInfoTemplate.Execute(&processedPackageTemplate, map[string]string{
+				"packageName": v.Name,
+				"elapsedTime": fmt.Sprintf("%f", v.ElapsedTime),
+				"coverage":    v.Coverage,
+			})
+			if err != nil {
+				log.Error().Err(err).Msg("error applying package info template")
+				os.Exit(1)
+			}
+
+			if v.Status == "pass" {
+				collapsibleHeading = template.HTML(
+					fmt.Sprintf(
+						`
+							<div class="collapsibleHeading packageCardLayout successBackgroundColor ">
+								%s
+							</div>
+						`,
+						template.HTML(processedPackageTemplate.Bytes()),
+					),
+				)
+
+			} else if v.Status == "fail" {
+				collapsibleHeading = template.HTML(
+					fmt.Sprintf(
+						`
+							<div class="collapsibleHeading packageCardLayout failBackgroundColor ">
+								%s
+							</div>
+						`,
+						template.HTML(processedPackageTemplate.Bytes()),
+					),
+				)
+
+			} else {
+				collapsibleHeading = template.HTML(
+					fmt.Sprintf(
+						`
+							<div class="collapsibleHeading packageCardLayout skipBackgroundColor">
+								%s
+							</div>
+						`,
+						template.HTML(processedPackageTemplate.Bytes()),
+					),
+				)
+			}
+
+			// construct a collapsible content
+			collapsibleContent := template.HTML(
+				fmt.Sprintf(`
+									<div class="collapsibleHeadingContent">
+										%s
+									</div>
+							`,
+					strings.Join(testSuiteOverview[v.Name], "\n"),
+				),
+			)
+
+			// wrap in a collapsible
+			collapsible := template.HTML(
+				fmt.Sprintf(`
+						<div type="button" class="collapsible">
+							%s
+							%s
+						</div>
+							`,
+					string(collapsibleHeading),
+					string(collapsibleContent),
+				),
+			)
+
+			elem = append(elem, string(collapsible))
+		}
+
+		return strings.Join(elem, "\n"), nil
+	}
+
+	testCases, _ := generateTestCaseHTMLElements(testSummary)
+
+	testSuites, _ := generateTestSuiteHTMLElements(testSummary, *testCases)
+
+	reporteData, _ := generatePackageDetailsHTMLElements(*testSuites)
 
 	reportTemplate := template.New("report-template.html")
 	reportTemplateData, err := assets.Asset("report-template.html")
@@ -531,7 +545,7 @@ func GenerateHTMLReport(totalTestTime, testDate string, failedTests, passedTests
 
 	err = report.Execute(&processedTemplate,
 		&templateData{
-			HTMLElements:  templates,
+			HTMLElements:  []template.HTML{template.HTML(reporteData)},
 			FailedTests:   failedTests,
 			PassedTests:   passedTests,
 			TotalTestTime: totalTestTime,
