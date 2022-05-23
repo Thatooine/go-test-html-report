@@ -404,7 +404,7 @@ func generateTestSuiteHTMLElements(testLogOverview []TestOverview, testCaseHTMLC
 
 	for _, testSuite := range testLogOverview {
 		collapsibleHeadingTemplate = `		
-										<div><p>{{.testName}}</p></div>
+										<div>{{.testName}}</div>
 										<div>{{.elapsedTime}}s</div>
 									`
 		testCaseTemplate, err := template.New("testSuite").Parse(collapsibleHeadingTemplate)
