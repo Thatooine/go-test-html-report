@@ -22,15 +22,16 @@
         }
 
         .packageCardLayout {
-            grid-template-columns: 1fr auto auto;
+            grid-template-columns: 1fr auto auto auto;
             grid-column-gap: 8px;
             display: grid;
         }
 
         .testCardLayout {
-            grid-template-columns: 1fr auto;
+            grid-template-columns: 1fr auto auto;
             display: grid;
             width: 95%;
+            gap: 8px;
             border-radius: 4px;
             margin-bottom: 5px;
             padding: 4px;
@@ -50,6 +51,14 @@
             font-size: 15px;
             border-radius: 4px;
             margin-bottom: 5px;
+        }
+
+        .collapsibleHeading:after {
+            content: '\002B';
+        }
+
+        .active:after {
+            content: "\2212";
         }
 
         .collapsibleHeadingContent {
@@ -103,6 +112,7 @@
         }
 
         collapsibleHeading.addEventListener("click", function () {
+            this.classList.toggle("active")
             var content = this.nextElementSibling;
             if (content.style.maxHeight) {
                 content.style.maxHeight = null;
