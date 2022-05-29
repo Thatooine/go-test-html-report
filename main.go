@@ -175,6 +175,7 @@ func ReadLogsFromStdIn() (*[]GoTestJsonRowData, error) {
 
 	return &rowData, nil
 }
+
 func ProcessTestData(rowData []GoTestJsonRowData) (*ProcessedTestdata, error) {
 	packageDetailsMap := map[string]PackageDetails{}
 	for _, r := range rowData {
