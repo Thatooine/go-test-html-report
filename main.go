@@ -285,11 +285,11 @@ func ProcessTestData(rowData []GoTestJsonRowData) (*ProcessedTestdata, error) {
 
 func GenerateHTMLReport(totalTestTime, testDate string, failedTests, passedTests int, testSummary []TestOverview, packageDetailsMap map[string]PackageDetails) error {
 
-	testCases, _ := generateTestCaseHTMLElements(testSummary)
+	testCasesEl, _ := generateTestCaseHTMLElements(testSummary)
 
-	testSuites, _ := generateTestSuiteHTMLElements(testSummary, *testCases)
+	testSuitesEl, _ := generateTestSuiteHTMLElements(testSummary, *testCasesEl)
 
-	reportData, _ := generatePackageDetailsHTMLElements(*testSuites, packageDetailsMap)
+	packagesEl, _ := generatePackageDetailsHTMLElements(*testSuitesEl, packageDetailsMap)
 
 	reportTemplate := template.New("report-template.html")
 	reportTemplateData, err := assets.Asset("report-template.html")
@@ -315,7 +315,7 @@ func GenerateHTMLReport(totalTestTime, testDate string, failedTests, passedTests
 
 	err = report.Execute(&processedTemplate,
 		&templateData{
-			HTMLElements:  []template.HTML{template.HTML(reportData)},
+			HTMLElements:  []template.HTML{template.HTML(packagesEl)},
 			FailedTests:   failedTests,
 			PassedTests:   passedTests,
 			TotalTestTime: totalTestTime,
