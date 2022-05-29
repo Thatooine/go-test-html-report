@@ -206,8 +206,8 @@ func ProcessTestData(rowData []GoTestJsonRowData) (*ProcessedTestdata, error) {
 		}
 	}
 
-	testSuiteIdx := map[string]TestDetails{}
-	testCasesIdx := map[string]TestDetails{}
+	testSuiteSlice := make([]TestDetails, 0)
+	testCasesSlice := make([]TestDetails, 0)
 	passedTests := 0
 	failedTests := 0
 	for _, r := range rowData {
@@ -217,12 +217,15 @@ func ProcessTestData(rowData []GoTestJsonRowData) (*ProcessedTestdata, error) {
 			// if testNameSlice is not equal 1 then we assume we have a test case information. Record test case info
 			if len(testNameSlice) != 1 {
 				if r.Action == "fail" || r.Action == "pass" {
-					testCasesIdx[r.Test] = TestDetails{
-						PackageName: r.Package,
-						Name:        r.Test,
-						ElapsedTime: r.Elapsed,
-						Status:      r.Action,
-					}
+					testCasesSlice = append(
+						testCasesSlice,
+						TestDetails{
+							PackageName: r.Package,
+							Name:        r.Test,
+							ElapsedTime: r.Elapsed,
+							Status:      r.Action,
+						},
+					)
 				}
 				if r.Action == "fail" {
 					failedTests = failedTests + 1
@@ -234,12 +237,19 @@ func ProcessTestData(rowData []GoTestJsonRowData) (*ProcessedTestdata, error) {
 
 			// record test suite info
 			if r.Action == "fail" || r.Action == "pass" {
-				testSuiteIdx[r.Test] = TestDetails{
-					PackageName: r.Package,
-					Name:        r.Test,
-					ElapsedTime: r.Elapsed,
-					Status:      r.Action,
-				}
+				testSuiteSlice = append(
+					testSuiteSlice,
+					TestDetails{
+						PackageName: r.Package,
+						Name:        r.Test,
+						ElapsedTime: r.Elapsed,
+						Status:      r.Action,
+					})
+			}
+			if r.Action == "fail" {
+				failedTests = failedTests + 1
+			} else if r.Action == "pass" {
+				passedTests = passedTests + 1
 			}
 		}
 	}
@@ -248,17 +258,20 @@ func ProcessTestData(rowData []GoTestJsonRowData) (*ProcessedTestdata, error) {
 	// group the test cases by their test suite
 	//
 	testSummary := make([]TestOverview, 0)
-	for _, t := range testSuiteIdx {
+	for _, t := range testSuiteSlice {
 		testCases := make([]TestDetails, 0)
-		for _, t2 := range testCasesIdx {
-			if strings.Contains(t2.Name, t.Name) {
+		for _, t2 := range testCasesSlice {
+			if strings.Contains(t2.Name, t.Name) && t2.PackageName == t.PackageName {
 				testCases = append(testCases, t2)
 			}
 		}
-		testSummary = append(testSummary, TestOverview{
-			TestSuite: t,
-			TestCases: testCases,
-		})
+		testSummary = append(
+			testSummary,
+			TestOverview{
+				TestSuite: t,
+				TestCases: testCases,
+			},
+		)
 	}
 
 	//
