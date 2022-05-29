@@ -401,7 +401,7 @@ func generateTestCaseHTMLElements(testsLogOverview []TestOverview) (*map[string]
 				)
 
 			}
-			testCasesCardsMap[testSuite.TestSuite.Name] = append(testCasesCardsMap[testSuite.TestSuite.Name], string(testCaseCard))
+			testCasesCardsMap[testSuite.TestSuite.Name+"-"+testSuite.TestSuite.PackageName] = append(testCasesCardsMap[testSuite.TestSuite.Name], string(testCaseCard))
 		}
 	}
 
@@ -467,7 +467,7 @@ func generateTestSuiteHTMLElements(testLogOverview []TestOverview, testCaseHTMLC
 										%s
 									</div>
 							`,
-				strings.Join(testCaseHTMLCards[testSuite.TestSuite.Name], "\n"),
+				strings.Join(testCaseHTMLCards[testSuite.TestSuite.Name+"-"+testSuite.TestSuite.PackageName], "\n"),
 			),
 		)
 
