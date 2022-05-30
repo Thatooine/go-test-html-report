@@ -61,6 +61,7 @@ func main() {
 }
 
 var fileName string
+var outputDirectory string
 
 func initCommand() *cobra.Command {
 	var rootCmd = &cobra.Command{
@@ -111,11 +112,20 @@ func initCommand() *cobra.Command {
 			return nil
 		},
 	}
-	rootCmd.PersistentFlags().StringVarP(&fileName,
+	rootCmd.PersistentFlags().StringVarP(
+		&fileName,
 		"file",
 		"f",
 		"",
-		"set the file of the go test json logs")
+		"set the file of the go test json logs",
+	)
+	rootCmd.Flags().StringVarP(
+		&fileName,
+		"output",
+		"o",
+		"",
+		"set the output directory of the html report",
+	)
 	return rootCmd
 }
 
