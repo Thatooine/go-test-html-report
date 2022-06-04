@@ -120,7 +120,7 @@ func initCommand() *cobra.Command {
 		"set the file of the go test json logs",
 	)
 	rootCmd.Flags().StringVarP(
-		&fileName,
+		&outputDirectory,
 		"output",
 		"o",
 		"",
@@ -351,8 +351,15 @@ func GenerateHTMLReport(totalTestTime, testDate string, failedTests, passedTests
 		return err
 	}
 
+	var path = ""
+	if outputDirectory == "" {
+		path = "./report.html"
+	} else {
+		path = fmt.Sprintf("%s/report.html", outputDirectory)
+	}
+
 	// write the whole body at once
-	err = ioutil.WriteFile("report.html", processedTemplate.Bytes(), 0644)
+	err = ioutil.WriteFile(path, processedTemplate.Bytes(), 0644)
 	if err != nil {
 		log.Error().Err(err).Msg("error writing report.html file")
 		return err
