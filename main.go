@@ -622,5 +622,11 @@ func formatTimeDisplay(secs float64) (float64, string) {
 	if secs > 1 {
 		return secs, "s"
 	}
-	return secs * float64(1000), "ms"
+
+	parsed, err := time.ParseDuration(fmt.Sprintf("%vs", secs))
+	if err != nil {
+		return 0, "ms"
+	}
+
+	return float64(parsed.Milliseconds()), "ms"
 }
