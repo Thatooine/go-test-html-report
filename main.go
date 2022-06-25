@@ -37,6 +37,7 @@ type ProcessedTestdata struct {
 type PackageDetails struct {
 	Name        string
 	ElapsedTime float64
+	TimeSymbol  string
 	Status      string
 	Coverage    string
 }
@@ -45,6 +46,7 @@ type TestDetails struct {
 	PackageName string
 	Name        string
 	ElapsedTime float64
+	TimeSymbol  string
 	Status      string
 }
 
@@ -191,9 +193,11 @@ func ProcessTestData(rowData []GoTestJsonRowData) (*ProcessedTestdata, error) {
 	for _, r := range rowData {
 		if r.Test == "" {
 			if r.Action == "fail" || r.Action == "pass" || r.Action == "skip" {
+				elapsedTime, timeSymbol := formatTimeDisplay(r.Elapsed)
 				packageDetailsMap[r.Package] = PackageDetails{
 					Name:        r.Package,
-					ElapsedTime: r.Elapsed,
+					ElapsedTime: elapsedTime,
+					TimeSymbol:  timeSymbol,
 					Status:      r.Action,
 					Coverage:    packageDetailsMap[r.Package].Coverage,
 				}
@@ -206,9 +210,11 @@ func ProcessTestData(rowData []GoTestJsonRowData) (*ProcessedTestdata, error) {
 				if strings.Contains(r.Output, "coverage") && strings.Contains(r.Output, "%") {
 					coverage = r.Output[strings.Index(r.Output, ":")+1 : strings.Index(r.Output, "%")+1]
 				}
+				elapsedTime, timeSymbol := formatTimeDisplay(packageDetailsMap[r.Package].ElapsedTime)
 				packageDetailsMap[r.Package] = PackageDetails{
 					Name:        packageDetailsMap[r.Package].Name,
-					ElapsedTime: packageDetailsMap[r.Package].ElapsedTime,
+					ElapsedTime: elapsedTime,
+					TimeSymbol:  timeSymbol,
 					Status:      packageDetailsMap[r.Package].Status,
 					Coverage:    coverage,
 				}
@@ -227,12 +233,14 @@ func ProcessTestData(rowData []GoTestJsonRowData) (*ProcessedTestdata, error) {
 			// if testNameSlice is not equal 1 then we assume we have a test case information. Record test case info
 			if len(testNameSlice) != 1 {
 				if r.Action == "fail" || r.Action == "pass" {
+					elapsedTime, timeSymbol := formatTimeDisplay(r.Elapsed)
 					testCasesSlice = append(
 						testCasesSlice,
 						TestDetails{
 							PackageName: r.Package,
 							Name:        r.Test,
-							ElapsedTime: r.Elapsed,
+							ElapsedTime: elapsedTime,
+							TimeSymbol:  timeSymbol,
 							Status:      r.Action,
 						},
 					)
@@ -247,12 +255,14 @@ func ProcessTestData(rowData []GoTestJsonRowData) (*ProcessedTestdata, error) {
 
 			// record test suite info
 			if r.Action == "fail" || r.Action == "pass" {
+				elapsedTime, timeSymbol := formatTimeDisplay(r.Elapsed)
 				testSuiteSlice = append(
 					testSuiteSlice,
 					TestDetails{
 						PackageName: r.Package,
 						Name:        r.Test,
-						ElapsedTime: r.Elapsed,
+						ElapsedTime: elapsedTime,
+						TimeSymbol:  timeSymbol,
 						Status:      r.Action,
 					})
 			}
@@ -377,7 +387,7 @@ func generateTestCaseHTMLElements(testsLogOverview []TestOverview) (*map[string]
 		for _, testCaseDetails := range testSuite.TestCases {
 			testCaseCard = `
 										<div>{{.testName}}</div>
-										<div>{{.elapsedTime}}s</div>
+										<div>{{.elapsedTime}}{{.timeSymbol}}</div>
 									`
 			testCaseTemplate, err := template.New("testCase").Parse(string(testCaseCard))
 			if err != nil {
@@ -389,6 +399,7 @@ func generateTestCaseHTMLElements(testsLogOverview []TestOverview) (*map[string]
 			err = testCaseTemplate.Execute(&processedTestCaseTemplate, map[string]string{
 				"testName":    testCaseDetails.Name,
 				"elapsedTime": fmt.Sprintf("%f", testCaseDetails.ElapsedTime),
+				"timeSymbol":  fmt.Sprintf("%s", testCaseDetails.TimeSymbol),
 			})
 
 			if err != nil {
@@ -436,7 +447,7 @@ func generateTestSuiteHTMLElements(testLogOverview []TestOverview, testCaseHTMLC
 	for _, testSuite := range testLogOverview {
 		collapsibleHeadingTemplate = `		
 										<div>{{.testName}}</div>
-										<div>{{.elapsedTime}}s</div>
+										<div>{{.elapsedTime}}{{.timeSymbol}}</div>
 									`
 		testCaseTemplate, err := template.New("testSuite").Parse(collapsibleHeadingTemplate)
 		if err != nil {
@@ -448,6 +459,7 @@ func generateTestSuiteHTMLElements(testLogOverview []TestOverview, testCaseHTMLC
 		err = testCaseTemplate.Execute(&processedTestCaseTemplate, map[string]string{
 			"testName":    testSuite.TestSuite.Name,
 			"elapsedTime": fmt.Sprintf("%f", testSuite.TestSuite.ElapsedTime),
+			"timeSymbol":  fmt.Sprintf("%s", testSuite.TestSuite.TimeSymbol),
 		})
 		if err != nil {
 			log.Error().Err(err).Msg("error applying test case template")
@@ -519,7 +531,7 @@ func generatePackageDetailsHTMLElements(testSuiteOverview map[string][]string, p
 		collapsibleHeadingTemplate = `
 											<div>{{.packageName}}</div>
 											<div>{{.coverage}}</div>
-											<div>{{.elapsedTime}}s</div>
+											<div>{{.elapsedTime}}{{.timeSymbol}}</div>
 											`
 
 		packageInfoTemplate, err := template.New("packageInfoTemplate").Parse(string(collapsibleHeadingTemplate))
@@ -531,6 +543,7 @@ func generatePackageDetailsHTMLElements(testSuiteOverview map[string][]string, p
 		err = packageInfoTemplate.Execute(&processedPackageTemplate, map[string]string{
 			"packageName": v.Name,
 			"elapsedTime": fmt.Sprintf("%f", v.ElapsedTime),
+			"timeSymbol":  fmt.Sprintf("%s", v.TimeSymbol),
 			"coverage":    v.Coverage,
 		})
 		if err != nil {
@@ -603,4 +616,17 @@ func generatePackageDetailsHTMLElements(testSuiteOverview map[string][]string, p
 	}
 
 	return strings.Join(elem, "\n"), nil
+}
+
+func formatTimeDisplay(secs float64) (float64, string) {
+	if secs > 1 {
+		return secs, "s"
+	}
+
+	parsed, err := time.ParseDuration(fmt.Sprintf("%vs", secs))
+	if err != nil {
+		return 0, "ms"
+	}
+
+	return float64(parsed.Milliseconds()), "ms"
 }
