@@ -3,18 +3,25 @@ package main
 import (
 	"bufio"
 	"bytes"
+	_ "embed"
 	"encoding/json"
+	"flag"
 	"fmt"
-	"github.com/Thatooine/go-test-html-report/assets"
-	"github.com/rs/zerolog/log"
-	"github.com/spf13/cobra"
 	"html/template"
-	"io/ioutil"
-	"math"
+	"log"
 	"os"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
+
+//go:embed assets/report-template.html
+var reportTemplateHTML string
+
+var coveragePattern = regexp.MustCompile(`coverage:\s*([0-9]+(?:\.[0-9]+)?)%`)
 
 type GoTestJsonRowData struct {
 	Time    time.Time
@@ -25,608 +32,800 @@ type GoTestJsonRowData struct {
 	Elapsed float64
 }
 
-type ProcessedTestdata struct {
-	TotalTestTime     string
-	TestDate          string
-	FailedTests       int
-	PassedTests       int
-	TestSummary       []TestOverview
-	PackageDetailsMap map[string]PackageDetails
+type ReportData struct {
+	Title            string
+	TestDate         string
+	GeneratedAt      string
+	TotalTestTime    string
+	PackageCount     int
+	HasCoverage      bool
+	Metrics          ReportMetrics
+	Packages         []PackageReport
+	SlowestTests     []SpotlightTest
+	FailureSpotlight []FailureSpotlight
 }
 
-type PackageDetails struct {
-	Name        string
-	ElapsedTime float64
-	TimeSymbol  string
-	Status      string
-	Coverage    string
+type ReportMetrics struct {
+	TotalTests      int
+	PassedTests     int
+	FailedTests     int
+	SkippedTests    int
+	SuiteCount      int
+	SubtestCount    int
+	FailedPackages  int
+	PassRate        string
+	CoverageAverage string
 }
 
-type TestDetails struct {
-	PackageName string
-	Name        string
-	ElapsedTime float64
-	TimeSymbol  string
-	Status      string
+type PackageReport struct {
+	Name           string
+	Status         string
+	StatusLabel    string
+	StatusClass    string
+	DurationLabel  string
+	CoverageLabel  string
+	CoverageWidth  string
+	PassRate       string
+	TotalTests     int
+	PassedTests    int
+	FailedTests    int
+	SkippedTests   int
+	FailureCount   int
+	SearchText     string
+	HasFailures    bool
+	SuiteCount     int
+	Suites         []SuiteReport
+	durationValue  float64
+	coverageValue  float64
+	coverageExists bool
 }
 
-type TestOverview struct {
-	TestSuite TestDetails
-	TestCases []TestDetails
+type SuiteReport struct {
+	Name          string
+	Status        string
+	StatusLabel   string
+	StatusClass   string
+	DurationLabel string
+	Output        string
+	HasOutput     bool
+	HasFailures   bool
+	TotalCases    int
+	PassedCases   int
+	FailedCases   int
+	SkippedCases  int
+	Cases         []CaseReport
+	durationValue float64
 }
 
-func main() {
-	rootCmd := initCommand()
-	if err := rootCmd.Execute(); err != nil {
-		os.Exit(1)
-	}
+type CaseReport struct {
+	Name          string
+	ShortName     string
+	Status        string
+	StatusLabel   string
+	StatusClass   string
+	DurationLabel string
+	Output        string
+	HasOutput     bool
+	durationValue float64
+}
+
+type SpotlightTest struct {
+	Label         string
+	PackageName   string
+	Status        string
+	StatusLabel   string
+	StatusClass   string
+	DurationLabel string
+	durationValue float64
+}
+
+type FailureSpotlight struct {
+	Label         string
+	PackageName   string
+	StatusLabel   string
+	StatusClass   string
+	DurationLabel string
+	Output        string
+	durationValue float64
+}
+
+type packageAccumulator struct {
+	name           string
+	explicitStatus string
+	elapsed        float64
+	coverageLabel  string
+	coverageValue  float64
+	coverageSeen   bool
+	suites         map[string]*suiteAccumulator
+}
+
+type suiteAccumulator struct {
+	name           string
+	explicitStatus string
+	elapsed        float64
+	outputs        []string
+	cases          map[string]*caseAccumulator
+}
+
+type caseAccumulator struct {
+	name           string
+	shortName      string
+	explicitStatus string
+	elapsed        float64
+	outputs        []string
 }
 
 var fileName string
 var outputDirectory string
 
-func initCommand() *cobra.Command {
-	var rootCmd = &cobra.Command{
-		Use:   "go-test-html-report",
-		Long:  "go-test-html-report generates a html report of go-test logs",
-		Short: "go-test-html-report generates a html report of go-test logs",
-		RunE: func(cmd *cobra.Command, args []string) (e error) {
-			testData := make([]GoTestJsonRowData, 0)
-
-			file, _ := cmd.Flags().GetString("file")
-			if file != "" {
-				fileLogData, err := ReadLogsFromFile(file)
-				if err != nil {
-					log.Error().Err(err).Msg("error reading logs from a file")
-					return err
-				}
-
-				testData = *fileLogData
-			} else {
-				stdInLogData, err := ReadLogsFromStdIn()
-				if err != nil {
-					log.Error().Err(err).Msg("error reading logs from standard input ")
-					return err
-				}
-
-				testData = *stdInLogData
-			}
-
-			processedTestdata, err := ProcessTestData(testData)
-			if err != nil {
-				log.Error().Err(err).Msg("error processing test logs")
-				return err
-			}
-
-			err = GenerateHTMLReport(processedTestdata.TotalTestTime,
-				processedTestdata.TestDate,
-				processedTestdata.FailedTests,
-				processedTestdata.PassedTests,
-				processedTestdata.TestSummary,
-				processedTestdata.PackageDetailsMap,
-			)
-			if err != nil {
-				log.Error().Err(err).Msg("error generating report html")
-				return err
-			}
-
-			log.Info().Msgf("Report generated successfully")
-			return nil
-		},
+func main() {
+	if err := run(); err != nil {
+		log.Printf("go-test-html-report: %v", err)
+		os.Exit(1)
 	}
-	rootCmd.PersistentFlags().StringVarP(
-		&fileName,
-		"file",
-		"f",
-		"",
-		"set the file of the go test json logs",
-	)
-	rootCmd.Flags().StringVarP(
-		&outputDirectory,
-		"output",
-		"o",
-		"",
-		"set the output directory of the html report",
-	)
-	return rootCmd
 }
 
-func ReadLogsFromFile(fileName string) (*[]GoTestJsonRowData, error) {
+func run() error {
+	flag.StringVar(&fileName, "file", "", "set the file of the go test json logs")
+	flag.StringVar(&fileName, "f", "", "set the file of the go test json logs")
+	flag.StringVar(&outputDirectory, "output", "", "set the output directory of the HTML report")
+	flag.StringVar(&outputDirectory, "o", "", "set the output directory of the HTML report")
+	flag.Parse()
+
+	var (
+		testData []GoTestJsonRowData
+		err      error
+	)
+
+	if fileName != "" {
+		testData, err = ReadLogsFromFile(fileName)
+		if err != nil {
+			return fmt.Errorf("read logs from file: %w", err)
+		}
+	} else {
+		testData, err = ReadLogsFromStdIn()
+		if err != nil {
+			return fmt.Errorf("read logs from stdin: %w", err)
+		}
+	}
+
+	reportData, err := ProcessTestData(testData)
+	if err != nil {
+		return fmt.Errorf("process test data: %w", err)
+	}
+
+	if err := GenerateHTMLReport(reportData); err != nil {
+		return fmt.Errorf("generate report HTML: %w", err)
+	}
+
+	log.Print("report generated successfully")
+	return nil
+}
+
+func ReadLogsFromFile(fileName string) ([]GoTestJsonRowData, error) {
 	file, err := os.Open(fileName)
 	if err != nil {
-		log.Error().Err(err).Msg("error opening file")
 		return nil, err
 	}
 	defer func() {
-		err := file.Close()
-		if err != nil {
-			log.Error().Err(err).Msg("error closing file")
+		if closeErr := file.Close(); closeErr != nil {
+			log.Printf("error closing file: %v", closeErr)
 		}
 	}()
 
-	// file scanner
-	scanner := bufio.NewScanner(file)
-	rowData := make([]GoTestJsonRowData, 0)
-	for scanner.Scan() {
-		row := GoTestJsonRowData{}
-		// unmarshall each line to GoTestJsonRowData
-		err = json.Unmarshal([]byte(scanner.Text()), &row)
-		if err != nil {
-			log.Error().Err(err).Msg("error unmarshalling go test logs")
-			return nil, err
-		}
-		rowData = append(rowData, row)
-	}
-
-	if err = scanner.Err(); err != nil {
-		log.Error().Err(err).Msg("error scanning file")
-		return nil, err
-	}
-
-	return &rowData, nil
+	return scanRows(bufio.NewScanner(file))
 }
 
-func ReadLogsFromStdIn() (*[]GoTestJsonRowData, error) {
-	// stdin scanner
-	scanner := bufio.NewScanner(os.Stdin)
-	rowData := make([]GoTestJsonRowData, 0)
+func ReadLogsFromStdIn() ([]GoTestJsonRowData, error) {
+	return scanRows(bufio.NewScanner(os.Stdin))
+}
+
+func scanRows(scanner *bufio.Scanner) ([]GoTestJsonRowData, error) {
+	rows := make([]GoTestJsonRowData, 0)
 	for scanner.Scan() {
-		row := GoTestJsonRowData{}
-		// unmarshall each line into GoTestJsonRowData
-		err := json.Unmarshal([]byte(scanner.Text()), &row)
-		if err != nil {
-			log.Error().Err(err).Msg("error unmarshalling the test logs")
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+
+		var row GoTestJsonRowData
+		if err := json.Unmarshal([]byte(line), &row); err != nil {
 			return nil, err
 		}
-		rowData = append(rowData, row)
+		rows = append(rows, row)
 	}
+
 	if err := scanner.Err(); err != nil {
-		log.Error().Err(err).Msg("error with stdin scanner")
 		return nil, err
 	}
 
-	return &rowData, nil
+	return rows, nil
 }
 
-func ProcessTestData(rowData []GoTestJsonRowData) (*ProcessedTestdata, error) {
-	packageDetailsMap := map[string]PackageDetails{}
-	for _, r := range rowData {
-		if r.Test == "" {
-			if r.Action == "fail" || r.Action == "pass" || r.Action == "skip" {
-				elapsedTime, timeSymbol := formatTimeDisplay(r.Elapsed)
-				packageDetailsMap[r.Package] = PackageDetails{
-					Name:        r.Package,
-					ElapsedTime: elapsedTime,
-					TimeSymbol:  timeSymbol,
-					Status:      r.Action,
-					Coverage:    packageDetailsMap[r.Package].Coverage,
-				}
-			}
+func ProcessTestData(rowData []GoTestJsonRowData) (*ReportData, error) {
+	if len(rowData) == 0 {
+		return nil, fmt.Errorf("no go test rows were supplied")
+	}
 
-			// get package coverage data
-			if r.Action == "output" {
-				// check if output contains coverage data
-				coverage := "-"
-				if strings.Contains(r.Output, "coverage") && strings.Contains(r.Output, "%") {
-					coverage = r.Output[strings.Index(r.Output, ":")+1 : strings.Index(r.Output, "%")+1]
-				}
-				elapsedTime, timeSymbol := formatTimeDisplay(packageDetailsMap[r.Package].ElapsedTime)
-				packageDetailsMap[r.Package] = PackageDetails{
-					Name:        packageDetailsMap[r.Package].Name,
-					ElapsedTime: elapsedTime,
-					TimeSymbol:  timeSymbol,
-					Status:      packageDetailsMap[r.Package].Status,
-					Coverage:    coverage,
-				}
+	packages := make(map[string]*packageAccumulator)
+	firstTimestamp := rowData[0].Time
+	lastTimestamp := rowData[0].Time
+
+	for _, row := range rowData {
+		if !row.Time.IsZero() {
+			if row.Time.Before(firstTimestamp) {
+				firstTimestamp = row.Time
+			}
+			if row.Time.After(lastTimestamp) {
+				lastTimestamp = row.Time
 			}
 		}
-	}
 
-	testSuiteSlice := make([]TestDetails, 0)
-	testCasesSlice := make([]TestDetails, 0)
-	passedTests := 0
-	failedTests := 0
-	for _, r := range rowData {
-		if r.Test != "" {
-			testNameSlice := strings.Split(r.Test, "/")
-
-			// if testNameSlice is not equal 1 then we assume we have a test case information. Record test case info
-			if len(testNameSlice) != 1 {
-				if r.Action == "fail" || r.Action == "pass" {
-					elapsedTime, timeSymbol := formatTimeDisplay(r.Elapsed)
-					testCasesSlice = append(
-						testCasesSlice,
-						TestDetails{
-							PackageName: r.Package,
-							Name:        r.Test,
-							ElapsedTime: elapsedTime,
-							TimeSymbol:  timeSymbol,
-							Status:      r.Action,
-						},
-					)
-				}
-				if r.Action == "fail" {
-					failedTests = failedTests + 1
-				} else if r.Action == "pass" {
-					passedTests = passedTests + 1
-				}
-				continue
-			}
-
-			// record test suite info
-			if r.Action == "fail" || r.Action == "pass" {
-				elapsedTime, timeSymbol := formatTimeDisplay(r.Elapsed)
-				testSuiteSlice = append(
-					testSuiteSlice,
-					TestDetails{
-						PackageName: r.Package,
-						Name:        r.Test,
-						ElapsedTime: elapsedTime,
-						TimeSymbol:  timeSymbol,
-						Status:      r.Action,
-					})
-			}
-			if r.Action == "fail" {
-				failedTests = failedTests + 1
-			} else if r.Action == "pass" {
-				passedTests = passedTests + 1
-			}
+		if row.Package == "" {
+			continue
 		}
-	}
 
-	//
-	// group the test cases by their test suite
-	//
-	testSummary := make([]TestOverview, 0)
-	for _, t := range testSuiteSlice {
-		testCases := make([]TestDetails, 0)
-		for _, t2 := range testCasesSlice {
-			if strings.Contains(t2.Name, t.Name) && t2.PackageName == t.PackageName {
-				testCases = append(testCases, t2)
-			}
+		pkg := ensurePackage(packages, row.Package)
+		if row.Test == "" {
+			processPackageRow(pkg, row)
+			continue
 		}
-		testSummary = append(
-			testSummary,
-			TestOverview{
-				TestSuite: t,
-				TestCases: testCases,
-			},
-		)
+
+		processTestRow(pkg, row)
 	}
 
-	//
-	// determine total test time
-	//
-	totalTestTime := ""
-	if rowData[len(rowData)-1].Time.Sub(rowData[0].Time).Seconds() < 60 {
-		totalTestTime = fmt.Sprintf("%f s", rowData[len(rowData)-1].Time.Sub(rowData[0].Time).Seconds())
-	} else {
-		min := int(math.Trunc(rowData[len(rowData)-1].Time.Sub(rowData[0].Time).Seconds() / 60))
-		seconds := int(math.Trunc((rowData[len(rowData)-1].Time.Sub(rowData[0].Time).Minutes() - float64(min)) * 60))
-		totalTestTime = fmt.Sprintf("%dm:%ds", min, seconds)
-	}
-	testDate := rowData[0].Time.Format(time.RFC850)
+	report := buildReport(packages)
+	report.Title = "Go Test Report"
+	report.TestDate = firstTimestamp.Format("02 Jan 2006 15:04 MST")
+	report.GeneratedAt = time.Now().Format("02 Jan 2006 15:04 MST")
+	report.TotalTestTime = formatDuration(lastTimestamp.Sub(firstTimestamp).Seconds())
 
-	return &ProcessedTestdata{
-		TotalTestTime:     totalTestTime,
-		TestDate:          testDate,
-		FailedTests:       failedTests,
-		PassedTests:       passedTests,
-		TestSummary:       testSummary,
-		PackageDetailsMap: packageDetailsMap,
-	}, nil
+	return report, nil
 }
 
-func GenerateHTMLReport(totalTestTime, testDate string, failedTests, passedTests int, testSummary []TestOverview, packageDetailsMap map[string]PackageDetails) error {
-
-	testCasesEl, _ := generateTestCaseHTMLElements(testSummary)
-
-	testSuitesEl, _ := generateTestSuiteHTMLElements(testSummary, *testCasesEl)
-
-	packagesEl, _ := generatePackageDetailsHTMLElements(*testSuitesEl, packageDetailsMap)
-
-	reportTemplate := template.New("report-template.html")
-	reportTemplateData, err := assets.Asset("report-template.html")
-	if err != nil {
-		log.Error().Err(err).Msg("error retrieving report-template.html")
-		return err
+func processPackageRow(pkg *packageAccumulator, row GoTestJsonRowData) {
+	if row.Action == "output" {
+		if coverageLabel, coverageValue, ok := extractCoverage(row.Output); ok {
+			pkg.coverageLabel = coverageLabel
+			pkg.coverageValue = coverageValue
+			pkg.coverageSeen = true
+		}
+		return
 	}
 
-	report, err := reportTemplate.Parse(string(reportTemplateData))
+	if isTerminalAction(row.Action) {
+		pkg.explicitStatus = row.Action
+		pkg.elapsed = row.Elapsed
+	}
+}
+
+func processTestRow(pkg *packageAccumulator, row GoTestJsonRowData) {
+	parts := strings.Split(row.Test, "/")
+	suite := ensureSuite(pkg, parts[0])
+
+	if len(parts) == 1 {
+		if row.Action == "output" {
+			suite.outputs = appendCleanOutput(suite.outputs, row.Output)
+			return
+		}
+		if isTerminalAction(row.Action) {
+			suite.explicitStatus = row.Action
+			suite.elapsed = row.Elapsed
+		}
+		return
+	}
+
+	testCase := ensureCase(suite, row.Test)
+	if row.Action == "output" {
+		testCase.outputs = appendCleanOutput(testCase.outputs, row.Output)
+		return
+	}
+	if isTerminalAction(row.Action) {
+		testCase.explicitStatus = row.Action
+		testCase.elapsed = row.Elapsed
+	}
+}
+
+func buildReport(packages map[string]*packageAccumulator) *ReportData {
+	report := &ReportData{}
+	packageNames := make([]string, 0, len(packages))
+	for name := range packages {
+		packageNames = append(packageNames, name)
+	}
+	sort.Strings(packageNames)
+
+	slowest := make([]SpotlightTest, 0)
+	failures := make([]FailureSpotlight, 0)
+
+	for _, packageName := range packageNames {
+		pkgReport, pkgSlowest, pkgFailures := buildPackageReport(packages[packageName])
+		report.Packages = append(report.Packages, pkgReport)
+		slowest = append(slowest, pkgSlowest...)
+		failures = append(failures, pkgFailures...)
+
+		report.Metrics.PassedTests += pkgReport.PassedTests
+		report.Metrics.FailedTests += pkgReport.FailedTests
+		report.Metrics.SkippedTests += pkgReport.SkippedTests
+		report.Metrics.SuiteCount += pkgReport.SuiteCount
+		for _, suite := range pkgReport.Suites {
+			report.Metrics.SubtestCount += suite.TotalCases
+		}
+		if pkgReport.HasFailures {
+			report.Metrics.FailedPackages++
+		}
+		if pkgReport.coverageExists {
+			report.HasCoverage = true
+		}
+	}
+
+	sortPackages(report.Packages)
+	report.PackageCount = len(report.Packages)
+	report.Metrics.TotalTests = report.Metrics.PassedTests + report.Metrics.FailedTests + report.Metrics.SkippedTests
+	report.Metrics.PassRate = formatPercent(report.Metrics.PassedTests, report.Metrics.TotalTests)
+	report.Metrics.CoverageAverage = calculateCoverageAverage(report.Packages)
+	report.SlowestTests = topSlowest(slowest, 8)
+	report.FailureSpotlight = topFailures(failures, 6)
+
+	return report
+}
+
+func buildPackageReport(pkg *packageAccumulator) (PackageReport, []SpotlightTest, []FailureSpotlight) {
+	report := PackageReport{
+		Name:           pkg.name,
+		DurationLabel:  formatDuration(pkg.elapsed),
+		CoverageLabel:  "No coverage data",
+		CoverageWidth:  "0%",
+		coverageValue:  pkg.coverageValue,
+		coverageExists: pkg.coverageSeen,
+		durationValue:  pkg.elapsed,
+	}
+	if pkg.coverageSeen {
+		report.CoverageLabel = pkg.coverageLabel
+		report.CoverageWidth = fmt.Sprintf("%.1f%%", pkg.coverageValue)
+	}
+
+	suiteNames := make([]string, 0, len(pkg.suites))
+	for name := range pkg.suites {
+		suiteNames = append(suiteNames, name)
+	}
+	sort.Strings(suiteNames)
+
+	slowest := make([]SpotlightTest, 0)
+	failures := make([]FailureSpotlight, 0)
+	childStatuses := make([]string, 0, len(suiteNames))
+
+	for _, suiteName := range suiteNames {
+		suiteReport, suiteSlowest, suiteFailures := buildSuiteReport(pkg.name, pkg.suites[suiteName])
+		report.Suites = append(report.Suites, suiteReport)
+		slowest = append(slowest, suiteSlowest...)
+		failures = append(failures, suiteFailures...)
+		report.PassedTests += countByStatus(suiteReport.Status, "pass")
+		report.FailedTests += countByStatus(suiteReport.Status, "fail")
+		report.SkippedTests += countByStatus(suiteReport.Status, "skip")
+		report.PassedTests += suiteReport.PassedCases
+		report.FailedTests += suiteReport.FailedCases
+		report.SkippedTests += suiteReport.SkippedCases
+		report.SuiteCount++
+		report.TotalTests += 1 + suiteReport.TotalCases
+		report.FailureCount += suiteReport.FailedCases
+		if suiteReport.Status == "fail" {
+			report.FailureCount++
+		}
+		if suiteReport.Status == "fail" || suiteReport.FailedCases > 0 {
+			report.HasFailures = true
+		}
+		childStatuses = append(childStatuses, suiteReport.Status)
+	}
+
+	report.Status = aggregateStatus(pkg.explicitStatus, childStatuses)
+	report.StatusLabel = statusLabel(report.Status)
+	report.StatusClass = statusClass(report.Status)
+	report.PassRate = formatPercent(report.PassedTests, report.TotalTests)
+	report.SearchText = strings.ToLower(buildPackageSearchText(report))
+
+	sortSuites(report.Suites)
+
+	return report, slowest, failures
+}
+
+func buildSuiteReport(packageName string, suite *suiteAccumulator) (SuiteReport, []SpotlightTest, []FailureSpotlight) {
+	report := SuiteReport{
+		Name:          suite.name,
+		DurationLabel: formatDuration(suite.elapsed),
+		Output:        strings.Join(suite.outputs, "\n"),
+		HasOutput:     len(suite.outputs) > 0,
+		durationValue: suite.elapsed,
+	}
+
+	caseNames := make([]string, 0, len(suite.cases))
+	for name := range suite.cases {
+		caseNames = append(caseNames, name)
+	}
+	sort.Strings(caseNames)
+
+	childStatuses := make([]string, 0, len(caseNames))
+	slowest := []SpotlightTest{
+		{
+			Label:         suite.name,
+			PackageName:   packageName,
+			Status:        report.Status,
+			StatusLabel:   statusLabel(report.Status),
+			StatusClass:   statusClass(report.Status),
+			DurationLabel: report.DurationLabel,
+			durationValue: suite.elapsed,
+		},
+	}
+	failures := make([]FailureSpotlight, 0)
+
+	for _, caseName := range caseNames {
+		caseReport := buildCaseReport(suite.cases[caseName])
+		report.Cases = append(report.Cases, caseReport)
+		report.TotalCases++
+		report.PassedCases += countByStatus(caseReport.Status, "pass")
+		report.FailedCases += countByStatus(caseReport.Status, "fail")
+		report.SkippedCases += countByStatus(caseReport.Status, "skip")
+		if caseReport.Status == "fail" {
+			report.HasFailures = true
+			failures = append(failures, FailureSpotlight{
+				Label:         caseReport.Name,
+				PackageName:   packageName,
+				StatusLabel:   caseReport.StatusLabel,
+				StatusClass:   caseReport.StatusClass,
+				DurationLabel: caseReport.DurationLabel,
+				Output:        caseReport.Output,
+				durationValue: caseReport.durationValue,
+			})
+		}
+		slowest = append(slowest, SpotlightTest{
+			Label:         caseReport.Name,
+			PackageName:   packageName,
+			Status:        caseReport.Status,
+			StatusLabel:   caseReport.StatusLabel,
+			StatusClass:   caseReport.StatusClass,
+			DurationLabel: caseReport.DurationLabel,
+			durationValue: caseReport.durationValue,
+		})
+		childStatuses = append(childStatuses, caseReport.Status)
+	}
+
+	report.Status = aggregateStatus(suite.explicitStatus, childStatuses)
+	report.StatusLabel = statusLabel(report.Status)
+	report.StatusClass = statusClass(report.Status)
+	if report.HasOutput && report.Status == "fail" {
+		failures = append(failures, FailureSpotlight{
+			Label:         suite.name,
+			PackageName:   packageName,
+			StatusLabel:   report.StatusLabel,
+			StatusClass:   report.StatusClass,
+			DurationLabel: report.DurationLabel,
+			Output:        report.Output,
+			durationValue: suite.elapsed,
+		})
+	}
+	sortCases(report.Cases)
+	slowest[0].Status = report.Status
+	slowest[0].StatusLabel = report.StatusLabel
+	slowest[0].StatusClass = report.StatusClass
+
+	return report, slowest, failures
+}
+
+func buildCaseReport(testCase *caseAccumulator) CaseReport {
+	status := aggregateStatus(testCase.explicitStatus, nil)
+	return CaseReport{
+		Name:          testCase.name,
+		ShortName:     testCase.shortName,
+		Status:        status,
+		StatusLabel:   statusLabel(status),
+		StatusClass:   statusClass(status),
+		DurationLabel: formatDuration(testCase.elapsed),
+		Output:        strings.Join(testCase.outputs, "\n"),
+		HasOutput:     len(testCase.outputs) > 0,
+		durationValue: testCase.elapsed,
+	}
+}
+
+func GenerateHTMLReport(data *ReportData) error {
+	report, err := template.New("report-template").Parse(reportTemplateHTML)
 	if err != nil {
-		log.Error().Err(err).Msg("error parsing report-template.html")
 		return err
 	}
 
 	var processedTemplate bytes.Buffer
-	type templateData struct {
-		HTMLElements  []template.HTML
-		FailedTests   int
-		PassedTests   int
-		TotalTestTime string
-		TestDate      string
-	}
-
-	err = report.Execute(&processedTemplate,
-		&templateData{
-			HTMLElements:  []template.HTML{template.HTML(packagesEl)},
-			FailedTests:   failedTests,
-			PassedTests:   passedTests,
-			TotalTestTime: totalTestTime,
-			TestDate:      testDate,
-		},
-	)
-	if err != nil {
-		log.Error().Err(err).Msg("error applying report-template.html")
+	if err := report.Execute(&processedTemplate, data); err != nil {
 		return err
 	}
 
-	var path = ""
-	if outputDirectory == "" {
-		path = "./report.html"
-	} else {
-		path = fmt.Sprintf("%s/report.html", outputDirectory)
+	path := "report.html"
+	if outputDirectory != "" {
+		if err := os.MkdirAll(outputDirectory, 0o755); err != nil {
+			return err
+		}
+		path = filepath.Join(outputDirectory, "report.html")
 	}
 
-	// write the whole body at once
-	err = ioutil.WriteFile(path, processedTemplate.Bytes(), 0644)
+	return os.WriteFile(path, processedTemplate.Bytes(), 0o644)
+}
+
+func ensurePackage(packages map[string]*packageAccumulator, packageName string) *packageAccumulator {
+	if pkg, ok := packages[packageName]; ok {
+		return pkg
+	}
+
+	pkg := &packageAccumulator{
+		name:   packageName,
+		suites: make(map[string]*suiteAccumulator),
+	}
+	packages[packageName] = pkg
+	return pkg
+}
+
+func ensureSuite(pkg *packageAccumulator, suiteName string) *suiteAccumulator {
+	if suite, ok := pkg.suites[suiteName]; ok {
+		return suite
+	}
+
+	suite := &suiteAccumulator{
+		name:  suiteName,
+		cases: make(map[string]*caseAccumulator),
+	}
+	pkg.suites[suiteName] = suite
+	return suite
+}
+
+func ensureCase(suite *suiteAccumulator, caseName string) *caseAccumulator {
+	if testCase, ok := suite.cases[caseName]; ok {
+		return testCase
+	}
+
+	parts := strings.Split(caseName, "/")
+	testCase := &caseAccumulator{
+		name:      caseName,
+		shortName: parts[len(parts)-1],
+	}
+	suite.cases[caseName] = testCase
+	return testCase
+}
+
+func appendCleanOutput(existing []string, raw string) []string {
+	for _, line := range strings.Split(raw, "\n") {
+		cleaned, keep := sanitizeOutputLine(line)
+		if keep {
+			existing = append(existing, cleaned)
+		}
+	}
+	return existing
+}
+
+func sanitizeOutputLine(line string) (string, bool) {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" {
+		return "", false
+	}
+
+	skipPrefixes := []string{
+		"=== RUN",
+		"=== PAUSE",
+		"=== CONT",
+		"--- PASS:",
+		"--- FAIL:",
+		"--- SKIP:",
+		"PASS",
+		"FAIL",
+		"ok  ",
+		"?   ",
+	}
+	for _, prefix := range skipPrefixes {
+		if strings.HasPrefix(trimmed, prefix) {
+			return "", false
+		}
+	}
+
+	return trimmed, true
+}
+
+func extractCoverage(output string) (string, float64, bool) {
+	match := coveragePattern.FindStringSubmatch(output)
+	if len(match) != 2 {
+		return "", 0, false
+	}
+
+	value, err := strconv.ParseFloat(match[1], 64)
 	if err != nil {
-		log.Error().Err(err).Msg("error writing report.html file")
-		return err
+		return "", 0, false
 	}
 
-	return nil
+	return fmt.Sprintf("%.1f%% covered", value), value, true
 }
 
-// generate test cases cards
-func generateTestCaseHTMLElements(testsLogOverview []TestOverview) (*map[string][]string, error) {
-	testCasesCardsMap := make(map[string][]string)
-	testCaseCard := template.HTML("")
-
-	for _, testSuite := range testsLogOverview {
-		for _, testCaseDetails := range testSuite.TestCases {
-			testCaseCard = `
-										<div>{{.testName}}</div>
-										<div>{{.elapsedTime}}{{.timeSymbol}}</div>
-									`
-			testCaseTemplate, err := template.New("testCase").Parse(string(testCaseCard))
-			if err != nil {
-				log.Error().Err(err).Msg("error parsing test case template")
-				return nil, err
-			}
-
-			var processedTestCaseTemplate bytes.Buffer
-			err = testCaseTemplate.Execute(&processedTestCaseTemplate, map[string]string{
-				"testName":    testCaseDetails.Name,
-				"elapsedTime": fmt.Sprintf("%f", testCaseDetails.ElapsedTime),
-				"timeSymbol":  fmt.Sprintf("%s", testCaseDetails.TimeSymbol),
-			})
-
-			if err != nil {
-				log.Error().Err(err).Msg("error applying test case template")
-				return nil, err
-			}
-			if testCaseDetails.Status == "pass" {
-				testCaseCard = template.HTML(
-					fmt.Sprintf(`
-												<div class="testCardLayout successBackgroundColor">
-												%s
-												</div>
-											`,
-						template.HTML(processedTestCaseTemplate.Bytes()),
-					),
-				)
-
-			} else if testCaseDetails.Status == "fail" {
-				testCaseCard = template.HTML(
-					fmt.Sprintf(`
-												<div class="testCardLayout failBackgroundColor ">
-												%s
-												</div>
-												`,
-						template.HTML(processedTestCaseTemplate.Bytes()),
-					),
-				)
-
-			}
-			testCasesCardsMap[testSuite.TestSuite.Name+"-"+testSuite.TestSuite.PackageName] = append(testCasesCardsMap[testSuite.TestSuite.Name], string(testCaseCard))
-		}
+func aggregateStatus(explicitStatus string, childStatuses []string) string {
+	if explicitStatus != "" {
+		return explicitStatus
 	}
-
-	return &testCasesCardsMap, nil
+	if hasStatus(childStatuses, "fail") {
+		return "fail"
+	}
+	if hasStatus(childStatuses, "pass") {
+		return "pass"
+	}
+	if hasStatus(childStatuses, "skip") {
+		return "skip"
+	}
+	return "unknown"
 }
 
-// generate test suites cards
-func generateTestSuiteHTMLElements(testLogOverview []TestOverview, testCaseHTMLCards map[string][]string) (*map[string][]string, error) {
-	testSuiteCollapsibleCardsMap := make(map[string][]string)
-	collapsible := template.HTML("")
-	collapsibleHeading := template.HTML("")
-	collapsibleHeadingTemplate := ""
-	collapsibleContent := template.HTML("")
-
-	for _, testSuite := range testLogOverview {
-		collapsibleHeadingTemplate = `		
-										<div>{{.testName}}</div>
-										<div>{{.elapsedTime}}{{.timeSymbol}}</div>
-									`
-		testCaseTemplate, err := template.New("testSuite").Parse(collapsibleHeadingTemplate)
-		if err != nil {
-			log.Error().Err(err).Msg("error parsing test case template")
-			return nil, err
+func hasStatus(statuses []string, target string) bool {
+	for _, status := range statuses {
+		if status == target {
+			return true
 		}
-
-		var processedTestCaseTemplate bytes.Buffer
-		err = testCaseTemplate.Execute(&processedTestCaseTemplate, map[string]string{
-			"testName":    testSuite.TestSuite.Name,
-			"elapsedTime": fmt.Sprintf("%f", testSuite.TestSuite.ElapsedTime),
-			"timeSymbol":  fmt.Sprintf("%s", testSuite.TestSuite.TimeSymbol),
-		})
-		if err != nil {
-			log.Error().Err(err).Msg("error applying test case template")
-			return nil, err
-		}
-
-		if testSuite.TestSuite.Status == "pass" {
-			collapsibleHeading = template.HTML(
-				fmt.Sprintf(`
-											<div class="testCardLayout successBackgroundColor collapsibleHeading">
-											%s
-											</div>
-										`,
-					template.HTML(processedTestCaseTemplate.Bytes()),
-				),
-			)
-
-		} else if testSuite.TestSuite.Status == "fail" {
-			collapsibleHeading = template.HTML(
-				fmt.Sprintf(`
-											<div class="testCardLayout failBackgroundColor collapsibleHeading">
-											%s
-											</div>
-										`,
-					template.HTML(processedTestCaseTemplate.Bytes()),
-				),
-			)
-		}
-
-		// construct a collapsible content
-		collapsibleContent = template.HTML(
-			fmt.Sprintf(`
-									<div class="collapsibleHeadingContent">
-										%s
-									</div>
-							`,
-				strings.Join(testCaseHTMLCards[testSuite.TestSuite.Name+"-"+testSuite.TestSuite.PackageName], "\n"),
-			),
-		)
-
-		// wrap in a collapsible
-		collapsible = template.HTML(
-			fmt.Sprintf(`
-						<div type="button" class="collapsible">
-							%s
-							%s
-						</div>
-							`,
-				string(collapsibleHeading),
-				string(collapsibleContent),
-			),
-		)
-
-		testSuiteCollapsibleCardsMap[testSuite.TestSuite.PackageName] = append(testSuiteCollapsibleCardsMap[testSuite.TestSuite.PackageName], string(collapsible))
 	}
-
-	return &testSuiteCollapsibleCardsMap, nil
+	return false
 }
 
-// generate package cards
-func generatePackageDetailsHTMLElements(testSuiteOverview map[string][]string, packageDetailsMap map[string]PackageDetails) (string, error) {
-	collapsibleHeading := template.HTML("")
-	collapsible := template.HTML("")
-	collapsibleHeadingTemplate := ""
-	collapsibleContent := template.HTML("")
-	elem := make([]string, 0)
-
-	for _, v := range packageDetailsMap {
-		collapsibleHeadingTemplate = `
-											<div>{{.packageName}}</div>
-											<div>{{.coverage}}</div>
-											<div>{{.elapsedTime}}{{.timeSymbol}}</div>
-											`
-
-		packageInfoTemplate, err := template.New("packageInfoTemplate").Parse(string(collapsibleHeadingTemplate))
-		if err != nil {
-			log.Error().Err(err).Msg("error parsing package info template")
-			os.Exit(1)
-		}
-		var processedPackageTemplate bytes.Buffer
-		err = packageInfoTemplate.Execute(&processedPackageTemplate, map[string]string{
-			"packageName": v.Name,
-			"elapsedTime": fmt.Sprintf("%f", v.ElapsedTime),
-			"timeSymbol":  fmt.Sprintf("%s", v.TimeSymbol),
-			"coverage":    v.Coverage,
-		})
-		if err != nil {
-			log.Error().Err(err).Msg("error applying package info template")
-			os.Exit(1)
-		}
-
-		if v.Status == "pass" {
-			collapsibleHeading = template.HTML(
-				fmt.Sprintf(
-					`
-							<div class="collapsibleHeading packageCardLayout successBackgroundColor ">
-								%s
-							</div>
-						`,
-					template.HTML(processedPackageTemplate.Bytes()),
-				),
-			)
-
-		} else if v.Status == "fail" {
-			collapsibleHeading = template.HTML(
-				fmt.Sprintf(
-					`
-							<div class="collapsibleHeading packageCardLayout failBackgroundColor ">
-								%s
-							</div>
-						`,
-					template.HTML(processedPackageTemplate.Bytes()),
-				),
-			)
-
-		} else {
-			collapsibleHeading = template.HTML(
-				fmt.Sprintf(
-					`
-							<div class="collapsibleHeading packageCardLayout skipBackgroundColor">
-								%s
-							</div>
-						`,
-					template.HTML(processedPackageTemplate.Bytes()),
-				),
-			)
-		}
-
-		// construct a collapsible content
-		collapsibleContent = template.HTML(
-			fmt.Sprintf(`
-									<div class="collapsibleHeadingContent">
-										%s
-									</div>
-							`,
-				strings.Join(testSuiteOverview[v.Name], "\n"),
-			),
-		)
-
-		// wrap in a collapsible
-		collapsible = template.HTML(
-			fmt.Sprintf(`
-						<div type="button" class="collapsible">
-							%s
-							%s
-						</div>
-							`,
-				string(collapsibleHeading),
-				string(collapsibleContent),
-			),
-		)
-
-		elem = append(elem, string(collapsible))
+func formatDuration(seconds float64) string {
+	if seconds <= 0 {
+		return "0ms"
 	}
-
-	return strings.Join(elem, "\n"), nil
+	if seconds >= 60 {
+		duration := time.Duration(seconds * float64(time.Second))
+		minutes := int(duration / time.Minute)
+		remainder := duration - (time.Duration(minutes) * time.Minute)
+		return fmt.Sprintf("%dm %02ds", minutes, int(remainder/time.Second))
+	}
+	if seconds >= 1 {
+		return fmt.Sprintf("%.2fs", seconds)
+	}
+	return fmt.Sprintf("%dms", int(seconds*1000))
 }
 
-func formatTimeDisplay(secs float64) (float64, string) {
-	if secs > 1 {
-		return secs, "s"
+func formatPercent(part, total int) string {
+	if total == 0 {
+		return "0%"
 	}
+	return fmt.Sprintf("%.0f%%", (float64(part)/float64(total))*100)
+}
 
-	parsed, err := time.ParseDuration(fmt.Sprintf("%vs", secs))
-	if err != nil {
-		return 0, "ms"
+func calculateCoverageAverage(packages []PackageReport) string {
+	total := 0.0
+	count := 0
+	for _, pkg := range packages {
+		if pkg.coverageExists {
+			total += pkg.coverageValue
+			count++
+		}
 	}
+	if count == 0 {
+		return "N/A"
+	}
+	return fmt.Sprintf("%.1f%%", total/float64(count))
+}
 
-	return float64(parsed.Milliseconds()), "ms"
+func buildPackageSearchText(pkg PackageReport) string {
+	parts := []string{pkg.Name}
+	for _, suite := range pkg.Suites {
+		parts = append(parts, suite.Name, suite.Output)
+		for _, testCase := range suite.Cases {
+			parts = append(parts, testCase.Name, testCase.Output)
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
+func sortPackages(packages []PackageReport) {
+	sort.SliceStable(packages, func(i, j int) bool {
+		if statusPriority(packages[i].Status) != statusPriority(packages[j].Status) {
+			return statusPriority(packages[i].Status) < statusPriority(packages[j].Status)
+		}
+		if packages[i].FailedTests != packages[j].FailedTests {
+			return packages[i].FailedTests > packages[j].FailedTests
+		}
+		if packages[i].durationValue != packages[j].durationValue {
+			return packages[i].durationValue > packages[j].durationValue
+		}
+		return packages[i].Name < packages[j].Name
+	})
+}
+
+func sortSuites(suites []SuiteReport) {
+	sort.SliceStable(suites, func(i, j int) bool {
+		if statusPriority(suites[i].Status) != statusPriority(suites[j].Status) {
+			return statusPriority(suites[i].Status) < statusPriority(suites[j].Status)
+		}
+		if suites[i].FailedCases != suites[j].FailedCases {
+			return suites[i].FailedCases > suites[j].FailedCases
+		}
+		if suites[i].durationValue != suites[j].durationValue {
+			return suites[i].durationValue > suites[j].durationValue
+		}
+		return suites[i].Name < suites[j].Name
+	})
+}
+
+func sortCases(cases []CaseReport) {
+	sort.SliceStable(cases, func(i, j int) bool {
+		if statusPriority(cases[i].Status) != statusPriority(cases[j].Status) {
+			return statusPriority(cases[i].Status) < statusPriority(cases[j].Status)
+		}
+		if cases[i].durationValue != cases[j].durationValue {
+			return cases[i].durationValue > cases[j].durationValue
+		}
+		return cases[i].Name < cases[j].Name
+	})
+}
+
+func topSlowest(items []SpotlightTest, limit int) []SpotlightTest {
+	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].durationValue != items[j].durationValue {
+			return items[i].durationValue > items[j].durationValue
+		}
+		return items[i].Label < items[j].Label
+	})
+	if len(items) > limit {
+		return items[:limit]
+	}
+	return items
+}
+
+func topFailures(items []FailureSpotlight, limit int) []FailureSpotlight {
+	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].durationValue != items[j].durationValue {
+			return items[i].durationValue > items[j].durationValue
+		}
+		return items[i].Label < items[j].Label
+	})
+	if len(items) > limit {
+		return items[:limit]
+	}
+	return items
+}
+
+func isTerminalAction(action string) bool {
+	return action == "pass" || action == "fail" || action == "skip"
+}
+
+func countByStatus(status, target string) int {
+	if status == target {
+		return 1
+	}
+	return 0
+}
+
+func statusPriority(status string) int {
+	switch status {
+	case "fail":
+		return 0
+	case "pass":
+		return 1
+	case "skip":
+		return 2
+	default:
+		return 3
+	}
+}
+
+func statusLabel(status string) string {
+	switch status {
+	case "pass":
+		return "Passed"
+	case "fail":
+		return "Failed"
+	case "skip":
+		return "Skipped"
+	default:
+		return "Unknown"
+	}
+}
+
+func statusClass(status string) string {
+	switch status {
+	case "pass":
+		return "status-pass"
+	case "fail":
+		return "status-fail"
+	case "skip":
+		return "status-skip"
+	default:
+		return "status-unknown"
+	}
 }

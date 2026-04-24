@@ -1,0 +1,21 @@
+{"Time":"2026-04-24T08:00:00Z","Action":"run","Package":"github.com/example/service/auth","Test":"TestLogin"}
+{"Time":"2026-04-24T08:00:00Z","Action":"output","Package":"github.com/example/service/auth","Test":"TestLogin","Output":"=== RUN   TestLogin\n"}
+{"Time":"2026-04-24T08:00:01Z","Action":"output","Package":"github.com/example/service/auth","Test":"TestLogin/succeeds_with_valid_password","Output":"token issued in 12ms\n"}
+{"Time":"2026-04-24T08:00:01Z","Action":"pass","Package":"github.com/example/service/auth","Test":"TestLogin/succeeds_with_valid_password","Elapsed":0.012}
+{"Time":"2026-04-24T08:00:02Z","Action":"output","Package":"github.com/example/service/auth","Test":"TestLogin/rejects_locked_account","Output":"expected status 423, got 500\nretry policy exhausted\n"}
+{"Time":"2026-04-24T08:00:02Z","Action":"fail","Package":"github.com/example/service/auth","Test":"TestLogin/rejects_locked_account","Elapsed":1.371}
+{"Time":"2026-04-24T08:00:02Z","Action":"fail","Package":"github.com/example/service/auth","Test":"TestLogin","Elapsed":1.442}
+{"Time":"2026-04-24T08:00:02Z","Action":"output","Package":"github.com/example/service/auth","Output":"coverage: 78.4% of statements\n"}
+{"Time":"2026-04-24T08:00:02Z","Action":"fail","Package":"github.com/example/service/auth","Elapsed":1.510}
+{"Time":"2026-04-24T08:00:03Z","Action":"run","Package":"github.com/example/service/billing","Test":"TestInvoiceLifecycle"}
+{"Time":"2026-04-24T08:00:03Z","Action":"output","Package":"github.com/example/service/billing","Test":"TestInvoiceLifecycle","Output":"seeded 14 fixtures\n"}
+{"Time":"2026-04-24T08:00:04Z","Action":"pass","Package":"github.com/example/service/billing","Test":"TestInvoiceLifecycle/create_invoice","Elapsed":0.644}
+{"Time":"2026-04-24T08:00:04Z","Action":"pass","Package":"github.com/example/service/billing","Test":"TestInvoiceLifecycle/send_invoice","Elapsed":0.934}
+{"Time":"2026-04-24T08:00:05Z","Action":"pass","Package":"github.com/example/service/billing","Test":"TestInvoiceLifecycle","Elapsed":2.183}
+{"Time":"2026-04-24T08:00:05Z","Action":"output","Package":"github.com/example/service/billing","Output":"coverage: 91.7% of statements\n"}
+{"Time":"2026-04-24T08:00:05Z","Action":"pass","Package":"github.com/example/service/billing","Elapsed":2.220}
+{"Time":"2026-04-24T08:00:06Z","Action":"skip","Package":"github.com/example/service/notifications","Test":"TestWeeklyDigest","Elapsed":0.004}
+{"Time":"2026-04-24T08:00:06Z","Action":"output","Package":"github.com/example/service/notifications","Test":"TestPushDelivery","Output":"provider sandbox disabled in CI\n"}
+{"Time":"2026-04-24T08:00:07Z","Action":"skip","Package":"github.com/example/service/notifications","Test":"TestPushDelivery","Elapsed":0.008}
+{"Time":"2026-04-24T08:00:07Z","Action":"output","Package":"github.com/example/service/notifications","Output":"coverage: 63.2% of statements\n"}
+{"Time":"2026-04-24T08:00:07Z","Action":"pass","Package":"github.com/example/service/notifications","Elapsed":0.021}

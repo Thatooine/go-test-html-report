@@ -2,125 +2,818 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Title</title>
-    <style type="text/css">
-        .root {
-            background-color: #232041;
-            color: white;
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}}</title>
+    <style>
+        :root {
+            --bg: #07111f;
+            --bg-elevated: rgba(11, 27, 46, 0.88);
+            --bg-muted: rgba(16, 38, 64, 0.76);
+            --line: rgba(159, 188, 220, 0.18);
+            --text: #e7f0f7;
+            --text-muted: #92abc0;
+            --pass: #3dd68c;
+            --fail: #ff6b6b;
+            --skip: #f5c451;
+            --unknown: #7f97b2;
+            --shadow: 0 18px 44px rgba(1, 8, 15, 0.38);
+            --radius-lg: 22px;
+            --radius-md: 16px;
+            --radius-sm: 12px;
         }
 
-        .successBackgroundColor {
-            background-color: darkgreen;
+        * {
+            box-sizing: border-box;
         }
 
-        .failBackgroundColor {
-            background-color: darkred;
+        html {
+            scroll-behavior: smooth;
         }
 
-        .skipBackgroundColor {
-            background-color: darkgrey;
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: "Avenir Next", "Segoe UI", sans-serif;
+            color: var(--text);
+            background:
+                radial-gradient(circle at top left, rgba(55, 196, 255, 0.16), transparent 30%),
+                radial-gradient(circle at top right, rgba(61, 214, 140, 0.14), transparent 24%),
+                linear-gradient(180deg, #0a1930 0%, #07111f 60%, #040a12 100%);
         }
 
-        .packageCardLayout {
-            grid-template-columns: 1fr auto auto auto;
-            grid-column-gap: 8px;
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background-image:
+                linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            background-size: 44px 44px;
+            mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.6), transparent 80%);
+        }
+
+        .page {
+            width: min(1380px, calc(100vw - 32px));
+            margin: 0 auto;
+            padding: 32px 0 56px;
+        }
+
+        .hero {
+            position: relative;
+            overflow: hidden;
+            border: 1px solid var(--line);
+            border-radius: 28px;
+            background:
+                linear-gradient(135deg, rgba(18, 43, 73, 0.94), rgba(9, 20, 35, 0.96)),
+                linear-gradient(120deg, rgba(61, 214, 140, 0.08), rgba(255, 107, 107, 0.08));
+            box-shadow: var(--shadow);
+            padding: 32px;
             display: grid;
+            gap: 28px;
         }
 
-        .testCardLayout {
-            grid-template-columns: 1fr auto auto;
+        .hero::after {
+            content: "";
+            position: absolute;
+            inset: auto -120px -120px auto;
+            width: 320px;
+            height: 320px;
+            border-radius: 999px;
+            background: radial-gradient(circle, rgba(61, 214, 140, 0.18), transparent 70%);
+        }
+
+        .hero-top {
+            display: flex;
+            justify-content: space-between;
+            gap: 24px;
+            align-items: flex-start;
+            flex-wrap: wrap;
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.16em;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        h1 {
+            margin: 10px 0 8px;
+            font-size: clamp(34px, 5vw, 58px);
+            line-height: 0.96;
+            letter-spacing: -0.05em;
+        }
+
+        .hero-copy {
+            margin: 0;
+            max-width: 760px;
+            color: var(--text-muted);
+            font-size: 16px;
+            line-height: 1.65;
+        }
+
+        .hero-meta {
             display: grid;
-            width: 100%;
+            gap: 10px;
+            min-width: 240px;
+            padding: 18px 20px;
+            border-radius: var(--radius-md);
+            background: rgba(5, 13, 23, 0.4);
+            border: 1px solid rgba(159, 188, 220, 0.14);
+            backdrop-filter: blur(10px);
+        }
+
+        .meta-label {
+            color: var(--text-muted);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+        }
+
+        .meta-value {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .metrics-grid,
+        .insights-grid {
+            display: grid;
+            gap: 16px;
+        }
+
+        .metrics-grid {
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        }
+
+        .metric-card,
+        .insight-panel,
+        .controls,
+        .package-card,
+        .suite-card,
+        .case-card {
+            border: 1px solid var(--line);
+            background: var(--bg-elevated);
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(14px);
+        }
+
+        .metric-card {
+            border-radius: var(--radius-md);
+            padding: 18px;
+            display: grid;
             gap: 8px;
-            border-radius: 4px;
-            margin-bottom: 5px;
-            padding: 4px;
         }
 
-        .collapsible {
+        .metric-label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: var(--text-muted);
+        }
+
+        .metric-value {
+            font-size: 30px;
+            font-weight: 700;
+            letter-spacing: -0.04em;
+        }
+
+        .metric-subtitle {
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+
+        .insights-grid {
+            grid-template-columns: 1.2fr 1fr;
+        }
+
+        .insight-panel {
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            display: grid;
+            gap: 16px;
+        }
+
+        .panel-title {
+            margin: 0;
+            font-size: 20px;
+            letter-spacing: -0.03em;
+        }
+
+        .panel-subtitle {
+            margin: 0;
+            color: var(--text-muted);
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .spotlight-list {
+            display: grid;
+            gap: 12px;
+        }
+
+        .spotlight-item {
+            display: grid;
+            gap: 8px;
+            padding: 14px 16px;
+            border-radius: var(--radius-sm);
+            background: var(--bg-muted);
+            border: 1px solid rgba(159, 188, 220, 0.12);
+        }
+
+        .spotlight-topline,
+        .suite-summary,
+        .case-summary,
+        .package-summary {
+            display: flex;
+            gap: 12px;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .mono {
+            font-family: "SFMono-Regular", "Menlo", monospace;
+            font-size: 13px;
+            color: #d7e5f4;
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 11px;
+            border-radius: 999px;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.09em;
+            font-weight: 700;
+        }
+
+        .status-pass {
+            color: var(--pass);
+            background: rgba(61, 214, 140, 0.12);
+        }
+
+        .status-fail {
+            color: var(--fail);
+            background: rgba(255, 107, 107, 0.12);
+        }
+
+        .status-skip {
+            color: var(--skip);
+            background: rgba(245, 196, 81, 0.12);
+        }
+
+        .status-unknown {
+            color: var(--unknown);
+            background: rgba(127, 151, 178, 0.12);
+        }
+
+        .controls {
+            position: sticky;
+            top: 16px;
+            z-index: 10;
+            margin-top: 20px;
+            border-radius: 20px;
+            padding: 18px;
+            display: grid;
+            gap: 16px;
+        }
+
+        .controls-row {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+        }
+
+        .search-input {
+            width: min(100%, 420px);
+            border: 1px solid rgba(159, 188, 220, 0.16);
+            background: rgba(4, 9, 16, 0.65);
+            color: var(--text);
+            border-radius: 999px;
+            padding: 14px 16px;
+            font-size: 15px;
+            outline: none;
+        }
+
+        .search-input:focus {
+            border-color: rgba(61, 214, 140, 0.45);
+            box-shadow: 0 0 0 3px rgba(61, 214, 140, 0.12);
+        }
+
+        .filter-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .filter-button {
+            border: 1px solid rgba(159, 188, 220, 0.16);
+            background: rgba(4, 9, 16, 0.6);
+            color: var(--text-muted);
+            padding: 10px 14px;
+            border-radius: 999px;
+            cursor: pointer;
+            font: inherit;
+        }
+
+        .filter-button.active {
+            color: var(--text);
+            border-color: rgba(61, 214, 140, 0.42);
+            background: rgba(61, 214, 140, 0.16);
+        }
+
+        .report-list {
+            margin-top: 22px;
+            display: grid;
+            gap: 16px;
+        }
+
+        .package-card,
+        .suite-card {
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+        }
+
+        .package-card > summary,
+        .suite-card > summary {
+            list-style: none;
             cursor: pointer;
         }
 
-        .collapsibleHeading {
-            color: white;
-            padding: 8px;
-            width: 100%;
-            border: none;
-            text-align: left;
-            outline: none;
-            font-size: 15px;
-            border-radius: 4px;
-            margin-bottom: 5px;
+        .package-card > summary::-webkit-details-marker,
+        .suite-card > summary::-webkit-details-marker {
+            display: none;
         }
 
-        .collapsibleHeading:after {
-            content: '\002B';
-        }
-
-        .active:after {
-            content: "\2212";
-        }
-
-        .collapsibleHeadingContent {
-            padding: 0 18px;
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.2s ease-out;
-        }
-
-        .testStatsOverview {
-            grid-template-columns: 1fr 1fr auto;
+        .package-header,
+        .suite-header {
+            padding: 22px 24px;
             display: grid;
+            gap: 14px;
         }
 
-        .passedTests {
-            font-size: x-large;
-            color: green;
+        .package-header {
+            background: linear-gradient(135deg, rgba(15, 34, 57, 0.96), rgba(7, 15, 26, 0.92));
         }
 
-        .failedTests {
-            font-size: x-large;
-            color: red;
+        .suite-header {
+            background: rgba(10, 24, 40, 0.7);
+        }
+
+        .package-name,
+        .suite-name {
+            margin: 0;
+            font-size: 24px;
+            letter-spacing: -0.03em;
+        }
+
+        .suite-name {
+            font-size: 19px;
+        }
+
+        .pill-row,
+        .meta-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .info-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            border-radius: 999px;
+            background: rgba(159, 188, 220, 0.08);
+            color: var(--text-muted);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .package-body {
+            display: grid;
+            gap: 18px;
+            padding: 0 24px 24px;
+        }
+
+        .package-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+        }
+
+        .stat-block {
+            padding: 14px;
+            border-radius: var(--radius-md);
+            background: rgba(9, 21, 36, 0.76);
+            border: 1px solid rgba(159, 188, 220, 0.12);
+        }
+
+        .stat-value {
+            font-size: 22px;
+            font-weight: 700;
+            letter-spacing: -0.03em;
+        }
+
+        .coverage-bar {
+            height: 10px;
+            border-radius: 999px;
+            background: rgba(159, 188, 220, 0.1);
+            overflow: hidden;
+        }
+
+        .coverage-bar > span {
+            display: block;
+            height: 100%;
+            width: 0;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #1fb3ff, #3dd68c);
+        }
+
+        .suite-list,
+        .case-grid {
+            display: grid;
+            gap: 14px;
+        }
+
+        .suite-body {
+            padding: 0 20px 20px;
+            display: grid;
+            gap: 16px;
+        }
+
+        .case-grid {
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        }
+
+        .case-card {
+            border-radius: var(--radius-md);
+            padding: 16px;
+            display: grid;
+            gap: 12px;
+            background: rgba(6, 15, 26, 0.78);
+        }
+
+        .case-title {
+            margin: 0;
+            font-size: 16px;
+        }
+
+        .label {
+            color: var(--text-muted);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.11em;
+        }
+
+        .output-block {
+            margin: 0;
+            padding: 14px;
+            border-radius: var(--radius-sm);
+            background: rgba(3, 7, 13, 0.84);
+            border: 1px solid rgba(159, 188, 220, 0.11);
+            color: #d7e5f4;
+            overflow: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+            line-height: 1.55;
+            font-size: 13px;
+            font-family: "SFMono-Regular", "Menlo", monospace;
+        }
+
+        .empty-state {
+            padding: 20px;
+            text-align: center;
+            color: var(--text-muted);
+            border-radius: var(--radius-md);
+            background: rgba(9, 21, 36, 0.6);
+            border: 1px dashed rgba(159, 188, 220, 0.16);
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        @media (max-width: 920px) {
+            .insights-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .hero {
+                padding: 24px;
+            }
+
+            .page {
+                width: min(100vw - 20px, 1380px);
+                padding-top: 20px;
+            }
+        }
+
+        @media (max-width: 640px) {
+            .hero-top,
+            .controls-row,
+            .package-summary,
+            .suite-summary,
+            .case-summary {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .package-header,
+            .suite-header,
+            .package-body,
+            .suite-body {
+                padding-left: 16px;
+                padding-right: 16px;
+            }
         }
     </style>
 </head>
-<body class="root">
-<div style="display: flex; flex-direction: column; margin: 16px; height: 100vh">
-    <div style="font-size: large">Go Test Report</div>
-    <div style="font-size: large">Test Date: {{.TestDate}}</div>
-    <div class="testStatsOverview">
-        <p style="margin-top: 0;" class="passedTests">Passed tests: {{.PassedTests}}</p>
-        <p style="margin-top: 0;" class="failedTests">Failed tests: {{.FailedTests}}</p>
-        <p style="font-size: x-large; margin-top: 0;">Total test time: {{.TotalTestTime}}</p>
-    </div>
-    {{range $index, $element := .HTMLElements}}
-    {{$element}}
-    {{end}}
-</div>
-</body>
+<body>
+<main class="page">
+    <section class="hero">
+        <div class="hero-top">
+            <div>
+                <span class="eyebrow">Go Test Intelligence</span>
+                <h1>{{.Title}}</h1>
+                <p class="hero-copy">A runtime-focused test dashboard with package health, searchable failures, slowest tests, coverage rollups, and nested suite details pulled directly from `go test -json` output.</p>
+            </div>
+            <div class="hero-meta">
+                <div>
+                    <div class="meta-label">Run Started</div>
+                    <div class="meta-value">{{.TestDate}}</div>
+                </div>
+                <div>
+                    <div class="meta-label">Report Generated</div>
+                    <div class="meta-value">{{.GeneratedAt}}</div>
+                </div>
+                <div>
+                    <div class="meta-label">Elapsed Window</div>
+                    <div class="meta-value">{{.TotalTestTime}}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="metrics-grid">
+            <article class="metric-card">
+                <div class="metric-label">Pass Rate</div>
+                <div class="metric-value">{{.Metrics.PassRate}}</div>
+                <div class="metric-subtitle">{{.Metrics.PassedTests}} passed of {{.Metrics.TotalTests}} total tests</div>
+            </article>
+            <article class="metric-card">
+                <div class="metric-label">Failures</div>
+                <div class="metric-value">{{.Metrics.FailedTests}}</div>
+                <div class="metric-subtitle">{{.Metrics.FailedPackages}} package{{if ne .Metrics.FailedPackages 1}}s{{end}} still need attention</div>
+            </article>
+            <article class="metric-card">
+                <div class="metric-label">Skipped</div>
+                <div class="metric-value">{{.Metrics.SkippedTests}}</div>
+                <div class="metric-subtitle">Useful for spotting gaps and quarantined scenarios</div>
+            </article>
+            <article class="metric-card">
+                <div class="metric-label">Coverage</div>
+                <div class="metric-value">{{.Metrics.CoverageAverage}}</div>
+                <div class="metric-subtitle">{{if .HasCoverage}}Average across packages that emitted coverage{{else}}No coverage lines were emitted{{end}}</div>
+            </article>
+            <article class="metric-card">
+                <div class="metric-label">Packages</div>
+                <div class="metric-value">{{.PackageCount}}</div>
+                <div class="metric-subtitle">{{.Metrics.SuiteCount}} suites, {{.Metrics.SubtestCount}} subtests tracked</div>
+            </article>
+        </div>
+    </section>
+
+    <section class="insights-grid" style="margin-top: 20px;">
+        <article class="insight-panel">
+            <div>
+                <h2 class="panel-title">Failure Spotlight</h2>
+                <p class="panel-subtitle">The heaviest failing suites and cases are pulled to the top so the report starts with the highest-cost breakages instead of a long linear list.</p>
+            </div>
+            <div class="spotlight-list">
+                {{if .FailureSpotlight}}
+                    {{range .FailureSpotlight}}
+                    <article class="spotlight-item">
+                        <div class="spotlight-topline">
+                            <span class="status-pill {{.StatusClass}}">{{.StatusLabel}}</span>
+                            <span class="mono">{{.DurationLabel}}</span>
+                        </div>
+                        <strong>{{.Label}}</strong>
+                        <span class="mono">{{.PackageName}}</span>
+                        {{if .Output}}<pre class="output-block">{{.Output}}</pre>{{end}}
+                    </article>
+                    {{end}}
+                {{else}}
+                    <div class="empty-state">No failing suites or subtests were found in this run.</div>
+                {{end}}
+            </div>
+        </article>
+
+        <article class="insight-panel">
+            <div>
+                <h2 class="panel-title">Slowest Tests</h2>
+                <p class="panel-subtitle">Mixed ranking of suites and subtests by runtime so expensive paths stand out without drilling into every package.</p>
+            </div>
+            <div class="spotlight-list">
+                {{range .SlowestTests}}
+                <article class="spotlight-item">
+                    <div class="spotlight-topline">
+                        <span class="status-pill {{.StatusClass}}">{{.StatusLabel}}</span>
+                        <span class="mono">{{.DurationLabel}}</span>
+                    </div>
+                    <strong>{{.Label}}</strong>
+                    <span class="mono">{{.PackageName}}</span>
+                </article>
+                {{end}}
+            </div>
+        </article>
+    </section>
+
+    <section class="controls">
+        <div class="controls-row">
+            <input id="searchInput" class="search-input" type="search" placeholder="Search packages, suites, cases, or failure output">
+            <div class="filter-group" role="group" aria-label="Status filter">
+                <button class="filter-button active" data-filter="all" type="button">All</button>
+                <button class="filter-button" data-filter="fail" type="button">Failing</button>
+                <button class="filter-button" data-filter="pass" type="button">Passing</button>
+                <button class="filter-button" data-filter="skip" type="button">Skipped</button>
+            </div>
+        </div>
+        <div class="controls-row">
+            <span class="meta-label" id="resultsCount">{{.PackageCount}} package{{if ne .PackageCount 1}}s{{end}} visible</span>
+            <button class="filter-button" id="expandFailures" type="button">Open Failures</button>
+        </div>
+    </section>
+
+    <section class="report-list" id="reportList">
+        {{range .Packages}}
+        <details class="package-card" data-package-card data-status="{{.Status}}" data-search="{{.SearchText}}" {{if .HasFailures}}open{{end}}>
+            <summary class="package-header">
+                <div class="package-summary">
+                    <div>
+                        <h2 class="package-name">{{.Name}}</h2>
+                        <div class="pill-row">
+                            <span class="status-pill {{.StatusClass}}">{{.StatusLabel}}</span>
+                            <span class="info-pill">{{.DurationLabel}}</span>
+                            <span class="info-pill">{{.SuiteCount}} suite{{if ne .SuiteCount 1}}s{{end}}</span>
+                            <span class="info-pill">{{.TotalTests}} test{{if ne .TotalTests 1}}s{{end}}</span>
+                        </div>
+                    </div>
+                    <div class="meta-row">
+                        <span class="mono">{{.CoverageLabel}}</span>
+                        <span class="mono">{{.PassRate}} pass rate</span>
+                    </div>
+                </div>
+            </summary>
+
+            <div class="package-body">
+                <div class="package-stats">
+                    <div class="stat-block">
+                        <div class="label">Passed</div>
+                        <div class="stat-value">{{.PassedTests}}</div>
+                    </div>
+                    <div class="stat-block">
+                        <div class="label">Failed</div>
+                        <div class="stat-value">{{.FailedTests}}</div>
+                    </div>
+                    <div class="stat-block">
+                        <div class="label">Skipped</div>
+                        <div class="stat-value">{{.SkippedTests}}</div>
+                    </div>
+                    <div class="stat-block">
+                        <div class="label">Coverage</div>
+                        <div class="stat-value">{{.CoverageLabel}}</div>
+                        <div class="coverage-bar"><span style="width: {{.CoverageWidth}};"></span></div>
+                    </div>
+                </div>
+
+                <div class="suite-list">
+                    {{range .Suites}}
+                    <details class="suite-card" {{if or .HasFailures .HasOutput}}open{{end}}>
+                        <summary class="suite-header">
+                            <div class="suite-summary">
+                                <div>
+                                    <h3 class="suite-name">{{.Name}}</h3>
+                                    <div class="pill-row">
+                                        <span class="status-pill {{.StatusClass}}">{{.StatusLabel}}</span>
+                                        <span class="info-pill">{{.DurationLabel}}</span>
+                                        <span class="info-pill">{{.TotalCases}} subtest{{if ne .TotalCases 1}}s{{end}}</span>
+                                    </div>
+                                </div>
+                                <div class="meta-row">
+                                    <span class="mono">{{.PassedCases}} pass</span>
+                                    <span class="mono">{{.FailedCases}} fail</span>
+                                    <span class="mono">{{.SkippedCases}} skip</span>
+                                </div>
+                            </div>
+                        </summary>
+
+                        <div class="suite-body">
+                            {{if .HasOutput}}
+                            <div>
+                                <div class="label">Suite Output</div>
+                                <pre class="output-block">{{.Output}}</pre>
+                            </div>
+                            {{end}}
+
+                            {{if .Cases}}
+                            <div class="case-grid">
+                                {{range .Cases}}
+                                <article class="case-card">
+                                    <div class="case-summary">
+                                        <div>
+                                            <div class="label">Subtest</div>
+                                            <h4 class="case-title">{{.ShortName}}</h4>
+                                        </div>
+                                        <span class="status-pill {{.StatusClass}}">{{.StatusLabel}}</span>
+                                    </div>
+                                    <div class="mono">{{.Name}}</div>
+                                    <div class="mono">{{.DurationLabel}}</div>
+                                    {{if .HasOutput}}
+                                    <pre class="output-block">{{.Output}}</pre>
+                                    {{end}}
+                                </article>
+                                {{end}}
+                            </div>
+                            {{else}}
+                            <div class="empty-state">No nested subtests were recorded for this suite.</div>
+                            {{end}}
+                        </div>
+                    </details>
+                    {{end}}
+                </div>
+            </div>
+        </details>
+        {{end}}
+    </section>
+</main>
+
 <script>
-    // js script to create an collapsable
-    var coll = document.getElementsByClassName("collapsible");
-    for (let i = 0; i < coll.length; i++) {
-        var collapsibleHeading = undefined
+    const searchInput = document.getElementById("searchInput");
+    const filterButtons = Array.from(document.querySelectorAll("[data-filter]"));
+    const packageCards = Array.from(document.querySelectorAll("[data-package-card]"));
+    const resultsCount = document.getElementById("resultsCount");
+    const expandFailures = document.getElementById("expandFailures");
 
-        for (let j = 0; j < coll[i].children.length; j++) {
-            let element = coll[i].children.item(j)
-            if (element.className.includes("collapsibleHeading")) {
-                collapsibleHeading = element
-                break
-            }
-        }
+    let activeFilter = "all";
 
-        collapsibleHeading.addEventListener("click", function () {
-            this.classList.toggle("active")
-            var content = this.nextElementSibling;
-            if (content.style.maxHeight) {
-                content.style.maxHeight = null;
-            } else {
-                content.style.maxHeight = window.innerHeight + "px";
+    function updateResultsLabel(visibleCount) {
+        resultsCount.textContent = `${visibleCount} package${visibleCount === 1 ? "" : "s"} visible`;
+    }
+
+    function applyFilters() {
+        const query = searchInput.value.trim().toLowerCase();
+        let visibleCount = 0;
+
+        packageCards.forEach((card) => {
+            const matchesFilter = activeFilter === "all" || card.dataset.status === activeFilter;
+            const matchesSearch = query === "" || card.dataset.search.includes(query);
+            const visible = matchesFilter && matchesSearch;
+            card.classList.toggle("hidden", !visible);
+            if (visible) {
+                visibleCount += 1;
             }
         });
+
+        updateResultsLabel(visibleCount);
     }
+
+    filterButtons.forEach((button) => {
+        button.addEventListener("click", () => {
+            activeFilter = button.dataset.filter;
+            filterButtons.forEach((item) => item.classList.toggle("active", item === button));
+            applyFilters();
+        });
+    });
+
+    searchInput.addEventListener("input", applyFilters);
+
+    expandFailures.addEventListener("click", () => {
+        packageCards.forEach((packageCard) => {
+            if (packageCard.dataset.status !== "fail") {
+                return;
+            }
+
+            packageCard.open = true;
+            packageCard.querySelectorAll(".suite-card").forEach((suiteCard) => {
+                const failedPill = suiteCard.querySelector(".status-fail");
+                if (failedPill) {
+                    suiteCard.open = true;
+                }
+            });
+        });
+    });
+
+    applyFilters();
 </script>
+</body>
 </html>
